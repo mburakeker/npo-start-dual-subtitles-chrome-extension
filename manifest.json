@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "NPO Dual Subtitles",
-  "description": "NPO Dual Subtitles for language learning",
+  "name": "NPO Start Dual Subtitles",
+  "description": "NPO Start Dual Subtitles for language learning",
   "version": "0.0.1",
   "icons": {
+    "128": "images/icon-128.png",
     "256": "images/icon-256.png"
   },
   "background": {
@@ -11,7 +12,16 @@
   },
   "action": {
     "default_icon": {
+      "128": "images/icon-128.png",
       "256": "images/icon-256.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+B",
+        "mac": "Command+B"
+      }
     }
   },
   "host_permissions": ["https://translate.googleapis.com/*", "*://*/*" ],

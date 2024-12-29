@@ -1,5 +1,5 @@
 // Constants
-const allowedUrl = "https://npo.nl/start/live";
+const allowedUrl = "https://npo.nl/start/";
 
 // Event Listeners
 chrome.action.onClicked.addListener((tab) => {

@@ -1,7 +1,6 @@
 // Constants
 const subtitleOverlaySelector = ".bmpui-ui-subtitle-overlay";
-const subtitleSpanSelector = ".bmpui-subtitle-region-container p:nth-child(1) > span:nth-child(1)";
-const subtitleSpanParentSelector = ".bmpui-subtitle-region-container p:nth-child(1)";
+const subtitleLabelSelector = ".bmpui-ui-subtitle-label"
 const translatedSubtitleColor = "#1eb7d3";
 
 // State
@@ -35,7 +34,7 @@ const monitorElementChanges = () => {
 const handleMutations = async () => {
   if (document.getElementsByClassName("translated").length > 0) return;
 
-  const subtitleSpan = document.querySelector(subtitleSpanSelector);
+  const subtitleSpan = document.querySelector(subtitleLabelSelector);
   if (!subtitleSpan) return;
 
   if (subtitleSpan.innerText === lastText) {
@@ -48,13 +47,14 @@ const handleMutations = async () => {
 };
 
 const addTranslatedSubtitle = (subtitle) => {
-  const subtitleSpanParent = document.querySelector(subtitleSpanParentSelector);
-  const subtitleSpan = document.querySelector(subtitleSpanSelector);
+  const subtitleSpanParent = document.querySelector(subtitleLabelSelector);
+  const subtitleSpan = subtitleSpanParent.firstChild;
 
   const newSpan = subtitleSpan.cloneNode(true);
   newSpan.innerText = subtitle;
   newSpan.classList.add("translated");
   newSpan.style.color = translatedSubtitleColor;
+  newSpan.style.backgroundColor = "black";
 
   const br = document.createElement("br");
   subtitleSpanParent.insertBefore(br, subtitleSpanParent.firstChild);
