@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "NPO Dual Subtitles",
+  "description": "NPO Dual Subtitles for language learning",
+  "version": "0.0.1",
+  "icons": {
+    "256": "images/icon-256.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "256": "images/icon-256.png"
+    }
+  },
+  "host_permissions": ["https://translate.googleapis.com/*", "*://*/*" ],
+  "content_scripts": [
+    {
+      "js": ["monitor.js"],
+      "matches": ["*://npo.nl/*"]
+    }
+  ],
+  "permissions": ["activeTab"]
+}
