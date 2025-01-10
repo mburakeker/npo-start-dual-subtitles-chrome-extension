@@ -27,7 +27,7 @@
   "host_permissions": ["https://translate.googleapis.com/*", "*://*/*" ],
   "content_scripts": [
     {
-      "js": ["monitor.js"],
+      "js": ["content.js"],
       "matches": ["*://npo.nl/*"]
     }
   ],

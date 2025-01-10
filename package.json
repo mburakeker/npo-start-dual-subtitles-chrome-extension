@@ -1,0 +1,32 @@
+{
+  "name": "npo-start-dual-subtitles-chrome-extension",
+  "version": "0.0.1",
+  "description": "NPO Start Dual Subtitles for language learning",
+  "type": "module",
+  "scripts": {
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mburakeker/npo-start-dual-subtitles-chrome-extension.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "translation",
+    "dutch-language"
+  ],
+  "author": "Burak Eker",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mburakeker/npo-start-dual-subtitles-chrome-extension/issues"
+  },
+  "homepage": "https://github.com/mburakeker/npo-start-dual-subtitles-chrome-extension#readme",
+  "devDependencies": {
+    "@types/chrome": "^0.0.289",
+    "copy-webpack-plugin": "^12.0.2",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.7.2",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1"
+  }
+}
