@@ -1,16 +1,6 @@
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
-// Constants
-const allowedUrl = "https://npo.nl/start/";
 
-// Event Listeners
-chrome.action.onClicked.addListener((tab: chrome.tabs.Tab) => {
-  if (tab?.url?.startsWith(allowedUrl) && tab.id) {
-    chrome.tabs.sendMessage(tab.id, {
-      type: ChromeRuntimeMessageType.InitiateMonitoring,
-    } as ChromeRuntimeMessage);
-  }
-});
 
 chrome.runtime.onMessage.addListener(
   (req: ChromeRuntimeMessage, sender: chrome.runtime.MessageSender): void => {
@@ -26,7 +16,10 @@ const translateSubtitle = async (
   tabId: number,
   subtitle: string
 ): Promise<void> => {
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=en&dt=t&q=${encodeURI(
+  if (!subtitle) return;
+  const { selectedLanguage } = await chrome.storage.local.get("selectedLanguage");
+
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=${selectedLanguage}&dt=t&q=${encodeURI(
     subtitle
   )}`;
 

@@ -14,7 +14,8 @@
     "default_icon": {
       "128": "images/icon-128.png",
       "256": "images/icon-256.png"
-    }
+    },
+    "default_popup": "popup.html"
   },
   "commands": {
     "_execute_action": {
@@ -24,12 +25,12 @@
       }
     }
   },
-  "host_permissions": ["https://translate.googleapis.com/*", "*://*/*" ],
+  "host_permissions": ["https://translate.googleapis.com/*"],
   "content_scripts": [
     {
       "js": ["content.js"],
       "matches": ["*://npo.nl/*"]
     }
   ],
-  "permissions": ["activeTab"]
+  "permissions": ["activeTab", "storage"]
 }

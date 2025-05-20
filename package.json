@@ -1,6 +1,6 @@
 {
   "name": "npo-start-dual-subtitles-chrome-extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "NPO Start Dual Subtitles for language learning",
   "type": "module",
   "scripts": {
