@@ -8,7 +8,6 @@ const translatedSubtitleColor = "#1eb7d3";
 // State
 let lastText: string;
 let lastTranslatedText: string;
-
 // Event Listeners
 chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
   if (req.type === ChromeRuntimeMessageType.InitiateMonitoring) {
@@ -17,7 +16,7 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
 });
 
 chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
-  if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload) {
+  if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload && req.payload) {
     addTranslatedSubtitle(req.payload);
     lastTranslatedText = req.payload;
   }
@@ -39,13 +38,15 @@ const handleMutations = async (): Promise<void> => {
   const subtitleParentElement = document.querySelector(subtitleLabelSelector) as HTMLElement;
   if (!subtitleParentElement) return;
 
-  if (subtitleParentElement.innerText === lastText) {
+  const textToTranslate = subtitleParentElement.innerText.split("\n").join(" ");
+
+  if (textToTranslate === lastText && lastTranslatedText !== undefined) {
     addTranslatedSubtitle(lastTranslatedText);
     return;
   }
 
-  chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.Translate, payload: subtitleParentElement.innerText } as ChromeRuntimeMessage);
-  lastText = subtitleParentElement.innerText;
+  chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.Translate, payload: textToTranslate } as ChromeRuntimeMessage);
+  lastText = textToTranslate;
 };
 
 const addTranslatedSubtitle = (subtitle: string): void => {

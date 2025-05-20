@@ -17,7 +17,7 @@ NPO Start Dual Subtitles is a Chrome extension designed for language learning. I
 
 2. Install the required packages and build:
     ```sh
-    npm i && npm run build
+    npm i & npm run build
     ```
 
 3. Open Chrome and navigate to `chrome://extensions/`
