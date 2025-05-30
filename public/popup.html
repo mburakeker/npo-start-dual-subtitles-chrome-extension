@@ -7,7 +7,10 @@
     <!-- Add Dropdown for language selection -->
     <label for="language-selector">Select Target Language:</label>
     <select id="language-selector"></select>
-    <button id="activate-button">Activate Translation</button>
+    <div class="buttons">
+      <button id="activate-button">Activate Translation</button>
+      <button id="one-click-button">Activate Translation V2 (One Click Setup)</button>
+    </div>
     <script src="popup.js"></script>
     <style>
       body {
@@ -55,8 +58,13 @@
       .popup select option {
         padding: 5px;
       }
-      .popup button {
+      .buttons {
         margin-top: 32px;
+        gap: 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      .popup button {
         height: 32px;
         padding: 5px 10px;
         background-color: #007bff;
@@ -65,6 +73,12 @@
         border-radius: 3px;
         cursor: pointer;
         width: 100%;
+      }
+      .popup button:hover {
+        background-color: #0056b3;
+      }
+      .popup button:active {
+        transform: scale(0.98);
       }
     </style>
   </body>

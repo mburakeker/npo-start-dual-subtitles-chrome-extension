@@ -71,3 +71,15 @@ activateButton.addEventListener('click', () => {
     }
   });
 });
+
+const oneClickButton = document.getElementById('one-click-button') as HTMLButtonElement;
+
+oneClickButton.addEventListener('click', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && tabs[0].id) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+            type: ChromeRuntimeMessageType.InitiateOneClickConfiguration,
+          } as ChromeRuntimeMessage);
+    }
+  });
+});

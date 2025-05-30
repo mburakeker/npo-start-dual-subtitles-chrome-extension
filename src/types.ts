@@ -7,4 +7,5 @@ export enum ChromeRuntimeMessageType {
   InitiateMonitoring = "initiateMonitoring",
   Translate = "translate",
   TranslateFinished = "translateFinished",
+  InitiateOneClickConfiguration = "initiateOneClickConfiguration",
 }

@@ -1,3 +1,4 @@
+import { clickSettingsButton, openSubtitleSettings, turnOffSubtitles, turnOnSubtitles } from "./onboarding-helper";
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
 // Constants
@@ -16,9 +17,15 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
 });
 
 chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
-  if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload && req.payload) {
+  if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload) {
     addTranslatedSubtitle(req.payload);
     lastTranslatedText = req.payload;
+  }
+});
+
+chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
+  if (req.type === ChromeRuntimeMessageType.InitiateOneClickConfiguration) {
+    startOnboarding();
   }
 });
 
@@ -30,7 +37,7 @@ const monitorDomChanges = (): void => {
   const observer = new MutationObserver(handleMutations);
   const config = { attributes: false, childList: true, subtree: true, characterData: true } as MutationObserverInit;
   observer.observe(targetNode, config);
-};
+}
 
 const handleMutations = async (): Promise<void> => {
   if (document.getElementsByClassName("translated").length > 0) return;
@@ -47,7 +54,7 @@ const handleMutations = async (): Promise<void> => {
 
   chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.Translate, payload: textToTranslate } as ChromeRuntimeMessage);
   lastText = textToTranslate;
-};
+}
 
 const addTranslatedSubtitle = (subtitle: string): void => {
   const subtitleParentElement = document.querySelector(subtitleLabelSelector) as HTMLElement;
@@ -56,7 +63,7 @@ const addTranslatedSubtitle = (subtitle: string): void => {
 
   const newSpan = createTranslatedSpan(subtitle);
   insertTranslatedSpan(subtitleParentElement, newSpan);
-};
+}
 
 const createTranslatedSpan = (subtitle: string): HTMLElement => {
   const newSpan = document.createElement("span");
@@ -65,10 +72,32 @@ const createTranslatedSpan = (subtitle: string): HTMLElement => {
   newSpan.style.color = translatedSubtitleColor;
   newSpan.style.backgroundColor = "black";
   return newSpan;
-};
+}
 
 const insertTranslatedSpan = (parent: HTMLElement, newSpan: HTMLElement): void => {
   const br = document.createElement("br");
   parent.insertBefore(br, parent.firstChild);
   parent.insertBefore(newSpan, parent.firstChild);
-};
+}
+
+const startOnboarding = (): void => {
+  clickSettingsButton();
+  setTimeout(() => {
+    openSubtitleSettings();
+  }, 200);
+  setTimeout(() => {
+    turnOffSubtitles();
+  }, 400);
+  setTimeout(() => {
+    openSubtitleSettings();
+  }, 600);
+  setTimeout(() => {
+    turnOnSubtitles();
+  }, 800);
+  setTimeout(() => {
+    clickSettingsButton();
+  }, 1000);
+  setTimeout(() => {
+    monitorDomChanges();
+  }, 1200);
+}

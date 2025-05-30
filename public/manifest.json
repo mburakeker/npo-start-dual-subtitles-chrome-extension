@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NPO Start Dual Subtitles",
   "description": "NPO Start Dual Subtitles for language learning",
-  "version": "0.0.1",
+  "version": "0.1.2",
   "icons": {
     "128": "images/icon-128.png",
     "256": "images/icon-256.png"
