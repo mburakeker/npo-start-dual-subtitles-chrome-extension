@@ -20,13 +20,43 @@
     </div>
     <script src="popup.js"></script>
     <style>
+      :root {
+        --bg-page: #f4f4f4;
+        --bg-popup: #ffffff;
+        --text-primary: #1a1a1a;
+        --text-secondary: #444444;
+        --text-muted: #555555;
+        --border-color: #cccccc;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+        --accent: #007bff;
+        --accent-hover: #0056b3;
+        --select-bg: #ffffff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-page: #121212;
+          --bg-popup: #1e1e1e;
+          --text-primary: #e8e8e8;
+          --text-secondary: #c0c0c0;
+          --text-muted: #a0a0a0;
+          --border-color: #444444;
+          --shadow-color: rgba(0, 0, 0, 0.5);
+          --accent: #4da3ff;
+          --accent-hover: #1a7fe8;
+          --select-bg: #2a2a2a;
+        }
+      }
+
       body {
         font-family: Arial, sans-serif;
         padding: 20px;
-        background-color: #f4f4f4;
+        background-color: var(--bg-page);
+        color: var(--text-primary);
       }
       label {
         font-weight: bold;
+        color: var(--text-primary);
       }
       select {
         padding: 5px;
@@ -34,13 +64,14 @@
       h1 {
         font-size: 24px;
         margin-bottom: 20px;
+        color: var(--text-primary);
       }
       .popup {
         min-width: 300px;
         min-height: 200px;
-        background-color: #fff;
+        background-color: var(--bg-popup);
         border-radius: 5px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 0 10px var(--shadow-color);
       }
       .popup h1 {
         font-size: 20px;
@@ -56,14 +87,18 @@
         padding: 5px;
         font-size: 14px;
         border-radius: 3px;
-        border: 1px solid #ccc;
+        border: 1px solid var(--border-color);
+        background-color: var(--select-bg);
+        color: var(--text-primary);
       }
       .popup select:focus {
         outline: none;
-        border-color: #007bff;
+        border-color: var(--accent);
       }
       .popup select option {
         padding: 5px;
+        background-color: var(--select-bg);
+        color: var(--text-primary);
       }
       .buttons {
         margin-top: 32px;
@@ -74,7 +109,7 @@
       .popup button {
         height: 32px;
         padding: 5px 10px;
-        background-color: #007bff;
+        background-color: var(--accent);
         color: white;
         border: none;
         border-radius: 3px;
@@ -82,7 +117,7 @@
         width: 100%;
       }
       .popup button:hover {
-        background-color: #0056b3;
+        background-color: var(--accent-hover);
       }
       .popup button:active {
         transform: scale(0.98);
@@ -92,6 +127,7 @@
       }
       .contact p {
         font-size: 12px;
+        color: var(--text-muted);
       }
       .contact-button-section {
         width: 100%;
@@ -100,9 +136,13 @@
       }
       .contact-button-item {
         text-decoration: none;
-        color: #007bff;
+        color: var(--accent);
         font-weight: bold;
         font-size: 14px;
+      }
+      hr {
+        border-color: var(--border-color);
+        opacity: 0.4;
       }
     </style>
   </body>
