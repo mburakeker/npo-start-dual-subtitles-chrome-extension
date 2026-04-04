@@ -1,0 +1,7 @@
+<svg fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M120 70H245V185H215L235 245L155 185H120V70Z" fill="white" stroke="black" stroke-width="4" stroke-linejoin="round"/>
+  <text x="145" y="150" font-family="Arial, sans-serif" font-size="60" font-weight="bold" fill="black">EN</text>
+  
+  <path d="M15 15H150V135H60L25 215V135H15V15Z" fill="#FF7F00" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+  <text x="22" y="95" font-family="Arial, sans-serif" font-size="55" font-weight="bold" fill="white">NPO</text>
+</svg>

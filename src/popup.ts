@@ -1,7 +1,5 @@
 'use strict';
 
-import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
-
 // add languages to the language selector
 const languageSelector = document.getElementById('language-selector') as HTMLSelectElement;
 
@@ -57,29 +55,4 @@ chrome.storage.local.get('selectedLanguage', (data) => {
   if (data.selectedLanguage) {
     languageSelector.value = data.selectedLanguage;
   }
-});
-
-// add event listener to the activate button
-const activateButton = document.getElementById('activate-button') as HTMLButtonElement;
-activateButton.addEventListener('click', () => {
-  // send a message to the content script to start monitoring
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0] && tabs[0].id) {
-      chrome.tabs.sendMessage(tabs[0].id, {
-            type: ChromeRuntimeMessageType.InitiateMonitoring,
-          } as ChromeRuntimeMessage);
-    }
-  });
-});
-
-const oneClickButton = document.getElementById('one-click-button') as HTMLButtonElement;
-
-oneClickButton.addEventListener('click', () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0] && tabs[0].id) {
-      chrome.tabs.sendMessage(tabs[0].id, {
-            type: ChromeRuntimeMessageType.InitiateOneClickConfiguration,
-          } as ChromeRuntimeMessage);
-    }
-  });
 });

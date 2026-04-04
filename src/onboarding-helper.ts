@@ -24,6 +24,22 @@ export function openSubtitleSettings() {
   });
 }
 
+export function hasNederlandsSubtitles(): boolean {
+  let found = false;
+  clickSettingsButton();
+  // Read the DOM synchronously right after opening — the panel renders immediately
+  openSubtitleSettings();
+  const listbox = document.querySelector(".bmpui-ui-listbox");
+  if (listbox) {
+    found = Array.from(listbox.querySelectorAll("button")).some(
+      (btn) => btn.textContent && btn.textContent.trim() === "Nederlands"
+    );
+  }
+  // Close settings panel again regardless
+  clickSettingsButton();
+  return found;
+}
+
 export function turnOffSubtitles() {
   const listbox = document.querySelector(".bmpui-ui-listbox");
 
@@ -37,7 +53,7 @@ export function turnOffSubtitles() {
   }
 }
 
-export function turnOnSubtitles() {
+export function turnOnSubtitles(): boolean {
   const listbox = document.querySelector(".bmpui-ui-listbox");
 
   if (listbox) {
@@ -46,6 +62,8 @@ export function turnOnSubtitles() {
     ).find((btn) => btn.textContent && btn.textContent.trim() === "Nederlands");
     if (nederlandsButton) {
       nederlandsButton.click();
+      return true;
     }
   }
+  return false;
 }
