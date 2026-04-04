@@ -1,4 +1,4 @@
-import { clickSettingsButton, hasNederlandsSubtitles, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
+import { clickSettingsButton, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
 // Constants
@@ -182,11 +182,11 @@ const injectToggleButton = (controlbar: Element): void => {
 
   spacer.insertAdjacentElement('afterend', btn);
 
-  // Auto-start: respect the last saved toggle state, then check subtitle availability
+  // Auto-start: respect the last saved toggle state
   chrome.storage.local.get(storageKeyTranslationEnabled, (data) => {
     const lastEnabled = data[storageKeyTranslationEnabled];
-    // Default to true on first install (key not yet set)
-    if (lastEnabled !== false && hasNederlandsSubtitles()) {
+    // Default to true on first install (key not yet set); activateWithSubtitles(true) handles missing subtitles silently
+    if (lastEnabled !== false) {
       activateWithSubtitles(true);
     }
   });
