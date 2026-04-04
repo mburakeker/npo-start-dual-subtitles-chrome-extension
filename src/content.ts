@@ -1,4 +1,4 @@
-import { clickSettingsButton, hasNederlandsSubtitles, openSubtitleSettings, turnOffSubtitles, turnOnSubtitles } from "./onboarding-helper";
+import { clickSettingsButton, hasNederlandsSubtitles, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
 // Constants
@@ -18,21 +18,9 @@ let playerContainerObserver: MutationObserver | null = null;
 
 // Event Listeners
 chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
-  if (req.type === ChromeRuntimeMessageType.InitiateMonitoring) {
-    startMonitoring();
-  }
-});
-
-chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
   if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload) {
     addTranslatedSubtitle(req.payload);
     lastTranslatedText = req.payload;
-  }
-});
-
-chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
-  if (req.type === ChromeRuntimeMessageType.InitiateOneClickConfiguration) {
-    startOnboarding();
   }
 });
 
@@ -147,28 +135,6 @@ const insertTranslatedSpan = (parent: HTMLElement, newSpan: HTMLElement): void =
   const br = document.createElement("br");
   parent.insertBefore(br, parent.firstChild);
   parent.insertBefore(newSpan, parent.firstChild);
-}
-
-const startOnboarding = (): void => {
-  clickSettingsButton();
-  setTimeout(() => {
-    openSubtitleSettings();
-  }, 200);
-  setTimeout(() => {
-    turnOffSubtitles();
-  }, 400);
-  setTimeout(() => {
-    openSubtitleSettings();
-  }, 600);
-  setTimeout(() => {
-    turnOnSubtitles();
-  }, 800);
-  setTimeout(() => {
-    clickSettingsButton();
-  }, 1000);
-  setTimeout(() => {
-    startMonitoring();
-  }, 1200);
 }
 
 const injectToggleButton = (controlbar: Element): void => {
