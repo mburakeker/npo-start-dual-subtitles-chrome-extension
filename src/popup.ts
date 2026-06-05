@@ -56,3 +56,22 @@ chrome.storage.local.get('selectedLanguage', (data) => {
     languageSelector.value = data.selectedLanguage;
   }
 });
+
+// word-click toggle
+const wordClickToggle = document.getElementById('word-click-toggle') as HTMLInputElement;
+chrome.storage.local.get('wordClickEnabled', (data) => {
+  // Default to enabled when not yet saved
+  wordClickToggle.checked = data.wordClickEnabled !== false;
+});
+wordClickToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ wordClickEnabled: wordClickToggle.checked });
+});
+
+// selectable subtitle mode toggle (for external translators)
+const subtitleSelectionToggle = document.getElementById('subtitle-selection-toggle') as HTMLInputElement;
+chrome.storage.local.get('subtitleSelectionEnabled', (data) => {
+  subtitleSelectionToggle.checked = data.subtitleSelectionEnabled === true;
+});
+subtitleSelectionToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ subtitleSelectionEnabled: subtitleSelectionToggle.checked });
+});

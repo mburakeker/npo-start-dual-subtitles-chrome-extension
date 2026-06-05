@@ -17,7 +17,21 @@
           <text x="22" y="95" font-family="Arial, sans-serif" font-size="55" font-weight="bold" fill="white">NPO</text>
         </svg>
       </span>
-      button in the video player controls to toggle it on or off.</p>
+      button in the video player controls to toggle it on or off. Subtitles are translated using <a class="gt-link" href="https://translate.google.com" target="_blank" rel="noopener noreferrer">Google Translate</a>.</p>
+    </div>
+    <div class="word-click-section">
+      <label class="word-click-label">
+        <input type="checkbox" id="word-click-toggle">
+        Click word to translate
+      </label>
+      <p class="word-click-desc">Click a Dutch subtitle word to pause the video and show its translation.</p>
+    </div>
+    <div class="word-click-section">
+      <label class="word-click-label">
+        <input type="checkbox" id="subtitle-selection-toggle">
+        Bring subtitles to front (selectable)
+      </label>
+      <p class="word-click-desc">Makes subtitle words selectable/hoverable so external tools (like Reverso) can translate words directly from the video page.</p>
     </div>
     <hr>
     <div class="contact">
@@ -26,6 +40,7 @@
         <a class="contact-button-item" href="mailto:mburakekerdev@gmail.com"><strong>mburakekerdev@gmail.com</strong></a>
       </div>
     </div>
+    <p class="disclaimer">THIS EXTENSION MAY CONTAIN TRANSLATIONS POWERED BY GOOGLE. GOOGLE DISCLAIMS ALL WARRANTIES RELATED TO THE TRANSLATIONS, EXPRESS OR IMPLIED, INCLUDING ANY WARRANTIES OF ACCURACY, RELIABILITY, AND ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.</p>
     <script src="popup.js"></script>
     <style>
       :root {
@@ -149,6 +164,39 @@
       hr {
         border-color: var(--border-color);
         opacity: 0.4;
+      }
+      .word-click-section {
+        margin-top: 16px;
+      }
+      .word-click-label {
+        font-size: 14px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: var(--text-primary);
+      }
+      .word-click-label input[type="checkbox"] {
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .word-click-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 4px 0 0 23px;
+      }
+      .gt-link {
+        color: var(--accent);
+      }
+      .disclaimer {
+        font-size: 10px;
+        color: var(--text-muted);
+        margin-top: 8px;
+        line-height: 1.4;
+        opacity: 0.7;
       }
     </style>
   </body>

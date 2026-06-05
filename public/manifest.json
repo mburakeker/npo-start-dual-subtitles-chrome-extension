@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NPO Start Dual Subtitles",
   "description": "NPO Start Dual Subtitles for language learning",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icons": {
     "128": "images/icon-128.png",
     "256": "images/icon-256.png"
@@ -17,7 +17,7 @@
     },
     "default_popup": "popup.html"
   },
-  "host_permissions": ["https://translate.googleapis.com/*"],
+  "host_permissions": ["https://translate.googleapis.com/*", "https://en.wiktionary.org/*"],
   "content_scripts": [
     {
       "js": ["content.js"],

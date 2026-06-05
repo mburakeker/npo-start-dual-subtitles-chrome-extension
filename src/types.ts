@@ -6,4 +6,6 @@ export type ChromeRuntimeMessage = {
 export enum ChromeRuntimeMessageType {
   Translate = "translate",
   TranslateFinished = "translateFinished",
+  TranslateWord = "translateWord",
+  TranslateWordFinished = "translateWordFinished",
 }

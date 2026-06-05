@@ -1,0 +1,26 @@
+﻿What's new:
+
+- [0.4.0] Added click-to-translate for subtitle words with an in-player popup, plus a selectable-subtitles checkbox so external tools like Reverso can translate words directly from the page.
+- [0.3.0] Translation now activates automatically when you open a video. A toggle button is injected directly into the video player controls  no need to open the extension popup. Your toggle state is saved and remembered across videos. Dutch subtitles (Nederlands) are enabled automatically when available.
+- [0.2.0] Added button to activate translation without extra steps. Added contact information to popup. Small UI improvements.
+- [0.1.1] Added popup to allow selecting target language from various options
+
+
+Elevate your language learning on NPO Start by watching Dutch content with real-time translated subtitles! Whether you're watching live channels, movies, or shows, the extension displays your target language alongside the original Dutch  no extra steps needed.
+
+How it works:
+
+- Head to NPO Start's website (https://npo.nl/start)
+- Play any video  the extension detects the player automatically
+- If Dutch subtitles (Nederlands) are available, translation activates on its own
+- Use the toggle button (the NPO/EN icon) in the bottom bar of the video player to turn translation on or off at any time
+- To change the target language, click the extension icon in the toolbar and select from the dropdown  your choice is saved
+
+Features:
+- Click-to-translate for subtitles
+- Fully automatic: no manual steps required when subtitles are available.
+- Player-integrated toggle button enable or disable translation without leaving the video.
+- Remembers your last toggle state across videos and page refreshes.
+- Translates Dutch subtitles to any of 30+ supported languages.
+- Works across NPO Start's live channels, movies, and shows.
+- Clean dual-subtitle display: original Dutch on screen, translation shown above it.
