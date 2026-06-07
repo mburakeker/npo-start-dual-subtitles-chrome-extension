@@ -59,19 +59,46 @@ chrome.storage.local.get('selectedLanguage', (data) => {
 
 // word-click toggle
 const wordClickToggle = document.getElementById('word-click-toggle') as HTMLInputElement;
-chrome.storage.local.get('wordClickEnabled', (data) => {
-  // Default to enabled when not yet saved
-  wordClickToggle.checked = data.wordClickEnabled !== false;
+const subtitleSelectionToggle = document.getElementById('subtitle-selection-toggle') as HTMLInputElement;
+const autoPauseToggle = document.getElementById('auto-pause-toggle') as HTMLInputElement;
+
+chrome.storage.local.get(['wordClickEnabled', 'subtitleSelectionEnabled', 'autoPauseEnabled'], (data) => {
+  const wordClickEnabled = data.wordClickEnabled !== false;
+  const subtitleSelectionEnabled = data.subtitleSelectionEnabled === true;
+  const autoPauseEnabled = data.autoPauseEnabled !== false;
+  autoPauseToggle.checked = autoPauseEnabled;
+
+  // Modes are mutually exclusive; keep selectable mode when both were saved as true.
+  if (wordClickEnabled && subtitleSelectionEnabled) {
+    wordClickToggle.checked = false;
+    subtitleSelectionToggle.checked = true;
+    chrome.storage.local.set({ wordClickEnabled: false, subtitleSelectionEnabled: true });
+    return;
+  }
+
+  wordClickToggle.checked = wordClickEnabled;
+  subtitleSelectionToggle.checked = subtitleSelectionEnabled;
 });
+
 wordClickToggle.addEventListener('change', () => {
-  chrome.storage.local.set({ wordClickEnabled: wordClickToggle.checked });
+  if (wordClickToggle.checked) {
+    subtitleSelectionToggle.checked = false;
+    chrome.storage.local.set({ wordClickEnabled: true, subtitleSelectionEnabled: false });
+  } else {
+    chrome.storage.local.set({ wordClickEnabled: false });
+  }
 });
 
 // selectable subtitle mode toggle (for external translators)
-const subtitleSelectionToggle = document.getElementById('subtitle-selection-toggle') as HTMLInputElement;
-chrome.storage.local.get('subtitleSelectionEnabled', (data) => {
-  subtitleSelectionToggle.checked = data.subtitleSelectionEnabled === true;
-});
 subtitleSelectionToggle.addEventListener('change', () => {
-  chrome.storage.local.set({ subtitleSelectionEnabled: subtitleSelectionToggle.checked });
+  if (subtitleSelectionToggle.checked) {
+    wordClickToggle.checked = false;
+    chrome.storage.local.set({ subtitleSelectionEnabled: true, wordClickEnabled: false });
+  } else {
+    chrome.storage.local.set({ subtitleSelectionEnabled: false });
+  }
+});
+
+autoPauseToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ autoPauseEnabled: autoPauseToggle.checked });
 });

@@ -25,13 +25,44 @@ let tooltipEl: HTMLElement | null = null;
 let clickAbortController: AbortController | null = null;
 let wordClickObserver: MutationObserver | null = null;
 let wordClickWaitObserver: MutationObserver | null = null;
+let wordClickTargetNode: Element | null = null;
 let subtitleSelectionAbortController: AbortController | null = null;
 let isPausedBySubtitleHover = false;
 let isPausedByWordHover = false;
 const storageKeyWordClickEnabled = "wordClickEnabled";
 const storageKeySubtitleSelectionEnabled = "subtitleSelectionEnabled";
+const storageKeyAutoPauseEnabled = "autoPauseEnabled";
 let currentSelectedLanguage = "en";
 let isSubtitleSelectionModeActive = false;
+let isAutoPauseEnabled = true;
+let isWordClickEnabled = true;
+
+const isExtensionContextInvalidError = (err: unknown): boolean => {
+  return err instanceof Error && /Extension context invalidated/i.test(err.message);
+};
+
+const safeStorageSet = (items: Record<string, unknown>): void => {
+  try {
+    chrome.storage.local.set(items);
+  } catch (err) {
+    if (!isExtensionContextInvalidError(err)) {
+      throw err;
+    }
+  }
+};
+
+const safeStorageGet = (
+  keys: string | string[],
+  callback: (items: Record<string, unknown>) => void
+): void => {
+  try {
+    chrome.storage.local.get(keys, callback);
+  } catch (err) {
+    if (!isExtensionContextInvalidError(err)) {
+      throw err;
+    }
+  }
+};
 
 const languageCodeToIso3: Record<string, string> = {
   en: "eng",
@@ -102,7 +133,7 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
 // Functions
 const startMonitoring = (): void => {
   isTranslationActive = true;
-  chrome.storage.local.set({ [storageKeyTranslationEnabled]: true });
+  safeStorageSet({ [storageKeyTranslationEnabled]: true });
   updateToggleButtonState();
   monitorDomChanges();
 };
@@ -137,7 +168,7 @@ const activateWithSubtitles = (silent = false): void => {
 
 const stopMonitoring = (): void => {
   isTranslationActive = false;
-  chrome.storage.local.set({ [storageKeyTranslationEnabled]: false });
+  safeStorageSet({ [storageKeyTranslationEnabled]: false });
   if (translationObserver) {
     translationObserver.disconnect();
     translationObserver = null;
@@ -229,7 +260,7 @@ const injectSubtitlePointerStyles = (): void => {
   // Keep pointer-events:none on the overlay itself so non-text clicks fall through to
   // the playback toggle overlay below — only the label and .npo-word spans are targets.
   const tooltipCss = [
-    '#npo-word-tooltip { position:fixed; display:none; z-index:2147483647; background:#1a1a2e; color:#e8e8e8; font-family:Arial,sans-serif; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.65),0 2px 8px rgba(0,0,0,0.4); min-width:300px; max-width:420px; pointer-events:auto; border:1px solid rgba(255,255,255,0.12); overflow:hidden; }',
+    '#npo-word-tooltip { position:fixed; display:none; z-index:2147483647; background:#1a1a2e; color:#e8e8e8; font-family:Arial,sans-serif; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.65),0 2px 8px rgba(0,0,0,0.4); min-width:300px; max-width:420px; pointer-events:auto; border:1px solid rgba(255,255,255,0.12); overflow:hidden; user-select:text; -webkit-user-select:text; }',
     '.npo-tt-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 8px; background:rgba(255,255,255,0.07); border-bottom:1px solid rgba(255,255,255,0.1); }',
     '.npo-tt-word { font-size:16px; font-weight:bold; color:#fff; letter-spacing:0.03em; }',
     '.npo-tt-close { all:unset; cursor:pointer; color:rgba(255,255,255,0.5); font-size:20px; line-height:1; padding:0 2px; border-radius:3px; }',
@@ -237,7 +268,7 @@ const injectSubtitlePointerStyles = (): void => {
     '.npo-tt-section { padding:8px 14px 10px; border-bottom:1px solid rgba(255,255,255,0.07); }',
     '.npo-tt-section:last-child { border-bottom:none; }',
     '.npo-tt-label { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:rgba(255,255,255,0.45); margin-bottom:4px; }',
-    '.npo-tt-text { font-size:14px; line-height:1.55; color:#e8e8e8; word-break:break-word; white-space:pre-line; }',
+    '.npo-tt-text { font-size:14px; line-height:1.55; color:#e8e8e8; word-break:break-word; white-space:pre-line; user-select:text; -webkit-user-select:text; cursor:text; }',
     '.npo-tt-not-found { color:rgba(255,255,255,0.35); font-style:italic; }',
     '.npo-tt-attribution-inline { font-size:10px; color:rgba(255,255,255,0.4); text-decoration:none; font-weight:normal; text-transform:none; letter-spacing:0; }',
     '.npo-tt-attribution-inline:hover { color:rgba(255,255,255,0.7); }',
@@ -247,9 +278,10 @@ const injectSubtitlePointerStyles = (): void => {
   ];
   style.textContent = [
     '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay { z-index: 10 !important; pointer-events: none !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: none !important; }',
+    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: auto !important; cursor: default !important; }',
     '.bmpui-ui-uicontainer .bmpui-ui-settings-panel, .bmpui-ui-uicontainer .bmpui-ui-settings-panel-page { z-index: 30 !important; pointer-events: auto !important; }',
     '.bmpui-ui-uicontainer .bmpui-ui-settingspanelpageopenbutton.bmpui-listbox-pager-button { z-index: 31 !important; pointer-events: auto !important; }',
+    '.bmpui-ui-uicontainer:has(.bmpui-ui-settingstogglebutton.bmpui-on) .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: none !important; }',
     '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .npo-word { pointer-events: auto !important; cursor: pointer !important; text-decoration: underline dotted rgba(255,255,255,0.55) !important; }',
     ...tooltipCss,
   ].join('\n');
@@ -289,6 +321,7 @@ const startSubtitleSelectionMode = (): void => {
   subtitleSelectionAbortController = new AbortController();
   const { signal } = subtitleSelectionAbortController;
   document.addEventListener('mouseover', (e: Event) => {
+    if (!isAutoPauseEnabled) return;
     const mouseEvent = e as MouseEvent;
     const target = mouseEvent.target as HTMLElement | null;
     if (!target) return;
@@ -305,6 +338,7 @@ const startSubtitleSelectionMode = (): void => {
   }, { signal });
 
   document.addEventListener('mouseout', (e: Event) => {
+    if (!isAutoPauseEnabled) return;
     const mouseEvent = e as MouseEvent;
     const target = mouseEvent.target as HTMLElement | null;
     if (!target) return;
@@ -477,7 +511,11 @@ const hideTooltip = (): void => {
 };
 
 const pauseVideoOnce = (): boolean => {
-  const btn = document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton.bmpui-on:not(.bmpui-stoptoggle)');
+  const btn =
+    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton.bmpui-on') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton.bmpui-on') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton');
   // Use bubbles:false so this programmatic click does not propagate to the document
   // listener that dismisses the tooltip.
   if (!btn) return false;
@@ -486,10 +524,21 @@ const pauseVideoOnce = (): boolean => {
 };
 
 const playVideoOnce = (): boolean => {
-  const btn = document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton:not(.bmpui-on):not(.bmpui-stoptoggle)');
+  const btn =
+    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton:not(.bmpui-on)') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton:not(.bmpui-on)') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton') ||
+    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton');
   if (!btn) return false;
   btn.dispatchEvent(new MouseEvent('click', { bubbles: false, cancelable: true }));
   return true;
+};
+
+const isVideoPlaying = (): boolean => {
+  return Boolean(
+    document.querySelector('.bmpui-ui-playbacktogglebutton.bmpui-on') ||
+    document.querySelector('.bmpui-ui-hugeplaybacktogglebutton.bmpui-on')
+  );
 };
 
 const wrapWordsInSubtitle = (subtitleLabel: HTMLElement): void => {
@@ -554,6 +603,7 @@ const attachSubtitleClickListeners = (): void => {
   const { signal } = clickAbortController;
 
   labelEl.addEventListener('mouseover', (e: Event) => {
+    if (!isAutoPauseEnabled) return;
     const mouseEvent = e as MouseEvent;
     const target = mouseEvent.target as HTMLElement | null;
     if (!target) return;
@@ -569,6 +619,7 @@ const attachSubtitleClickListeners = (): void => {
   }, { signal });
 
   labelEl.addEventListener('mouseout', (e: Event) => {
+    if (!isAutoPauseEnabled) return;
     const mouseEvent = e as MouseEvent;
     const target = mouseEvent.target as HTMLElement | null;
     if (!target) return;
@@ -577,6 +628,17 @@ const attachSubtitleClickListeners = (): void => {
 
     const related = mouseEvent.relatedTarget as HTMLElement | null;
     if (related && wordEl.contains(related)) return;
+    if (related && labelEl.contains(related)) return;
+
+    // When moving across text gaps, relatedTarget can be null; keep paused if the
+    // pointer is still within the subtitle label's box.
+    const rect = labelEl.getBoundingClientRect();
+    const isStillInsideLabel =
+      mouseEvent.clientX >= rect.left &&
+      mouseEvent.clientX <= rect.right &&
+      mouseEvent.clientY >= rect.top &&
+      mouseEvent.clientY <= rect.bottom;
+    if (isStillInsideLabel) return;
 
     const isTooltipOpen = Boolean(tooltipEl && tooltipEl.style.display !== 'none');
     if (!isTooltipOpen && isPausedByWordHover) {
@@ -594,7 +656,9 @@ const attachSubtitleClickListeners = (): void => {
     const word = target.dataset.word;
     if (!word) return;
     currentClickedWord = word;
-    pauseVideoOnce();
+    if (isVideoPlaying()) {
+      pauseVideoOnce();
+    }
     if (wordTranslationCache.has(word)) {
       showTooltip(target, word, wordTranslationCache.get(word)!);
     } else {
@@ -617,21 +681,30 @@ const detachSubtitleClickListeners = (): void => {
 };
 
 const startWordClick = (): void => {
-  if (wordClickObserver) return;
-
-  const targetNode = document.querySelector(subtitleOverlaySelector);
-  if (!targetNode) {
-    if (wordClickWaitObserver) return;
+  if (!wordClickWaitObserver) {
+    // Keep watching the page so we can rebind when the player/subtitle overlay is recreated.
     wordClickWaitObserver = new MutationObserver(() => {
-      if (document.querySelector(subtitleOverlaySelector)) {
-        wordClickWaitObserver?.disconnect();
-        wordClickWaitObserver = null;
+      const currentTarget = document.querySelector(subtitleOverlaySelector);
+      if (currentTarget && currentTarget !== wordClickTargetNode) {
         startWordClick();
       }
     });
     wordClickWaitObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  const targetNode = document.querySelector(subtitleOverlaySelector);
+  if (!targetNode) {
     return;
   }
+
+  if (wordClickObserver && wordClickTargetNode === targetNode) return;
+
+  if (wordClickObserver) {
+    wordClickObserver.disconnect();
+    wordClickObserver = null;
+  }
+
+  wordClickTargetNode = targetNode;
 
   const tryWrap = (): void => {
     const labelEl = document.querySelector<HTMLElement>(subtitleLabelSelector);
@@ -653,6 +726,7 @@ const startWordClick = (): void => {
 const stopWordClick = (): void => {
   wordClickWaitObserver?.disconnect();
   wordClickWaitObserver = null;
+  wordClickTargetNode = null;
   if (wordClickObserver) {
     wordClickObserver.disconnect();
     wordClickObserver = null;
@@ -704,15 +778,6 @@ const injectToggleButton = (controlbar: Element): void => {
   });
 
   spacer.insertAdjacentElement('afterend', btn);
-
-  // Auto-start: respect the last saved toggle state
-  chrome.storage.local.get(storageKeyTranslationEnabled, (data) => {
-    const lastEnabled = data[storageKeyTranslationEnabled];
-    // Default to true on first install (key not yet set); activateWithSubtitles(true) handles missing subtitles silently
-    if (lastEnabled !== false) {
-      activateWithSubtitles(true);
-    }
-  });
 };
 
 const watchForPlayerContainer = (): void => {
@@ -733,12 +798,14 @@ const watchForPlayerContainer = (): void => {
 };
 
 // Bootstrap
-chrome.storage.local.get([storageKeyWordClickEnabled, storageKeySubtitleSelectionEnabled, 'selectedLanguage'], (data) => {
+safeStorageGet([storageKeyWordClickEnabled, storageKeySubtitleSelectionEnabled, storageKeyAutoPauseEnabled, 'selectedLanguage'], (data) => {
   if (data['selectedLanguage']) currentSelectedLanguage = data['selectedLanguage'] as string;
-  if (data[storageKeySubtitleSelectionEnabled] === true) {
+  isAutoPauseEnabled = data[storageKeyAutoPauseEnabled] !== false;
+  isWordClickEnabled = data[storageKeyWordClickEnabled] !== false;
+  const isSubtitleSelectionEnabled = data[storageKeySubtitleSelectionEnabled] === true;
+  if (isSubtitleSelectionEnabled) {
     startSubtitleSelectionMode();
-  } else if (data[storageKeyWordClickEnabled] !== false) {
-    // Default to enabled when not yet saved
+  } else if (isWordClickEnabled) {
     startWordClick();
   }
 });
@@ -747,24 +814,34 @@ chrome.storage.onChanged.addListener((changes) => {
   if ('selectedLanguage' in changes && changes['selectedLanguage'].newValue) {
     currentSelectedLanguage = changes['selectedLanguage'].newValue as string;
   }
-  if (storageKeyWordClickEnabled in changes) {
-    if (isSubtitleSelectionModeActive) return;
-    if (changes[storageKeyWordClickEnabled].newValue === true) {
-      startWordClick();
-    } else {
-      stopWordClick();
+  if (storageKeyAutoPauseEnabled in changes) {
+    isAutoPauseEnabled = changes[storageKeyAutoPauseEnabled].newValue !== false;
+    if (!isAutoPauseEnabled) {
+      if (isPausedByWordHover || isPausedBySubtitleHover) {
+        playVideoOnce();
+      }
+      isPausedByWordHover = false;
+      isPausedBySubtitleHover = false;
     }
   }
-  if (storageKeySubtitleSelectionEnabled in changes) {
-    if (changes[storageKeySubtitleSelectionEnabled].newValue === true) {
+  if (storageKeyWordClickEnabled in changes) {
+    isWordClickEnabled = changes[storageKeyWordClickEnabled].newValue === true;
+  }
+  if (storageKeyWordClickEnabled in changes || storageKeySubtitleSelectionEnabled in changes) {
+    const subtitleSelectionEnabled =
+      storageKeySubtitleSelectionEnabled in changes
+        ? changes[storageKeySubtitleSelectionEnabled].newValue === true
+        : isSubtitleSelectionModeActive;
+
+    if (subtitleSelectionEnabled) {
       startSubtitleSelectionMode();
+      stopWordClick();
+    } else if (isWordClickEnabled) {
+      stopSubtitleSelectionMode();
+      startWordClick();
     } else {
       stopSubtitleSelectionMode();
-      chrome.storage.local.get(storageKeyWordClickEnabled, (data) => {
-        if (data[storageKeyWordClickEnabled] !== false) {
-          startWordClick();
-        }
-      });
+      stopWordClick();
     }
   }
 });
