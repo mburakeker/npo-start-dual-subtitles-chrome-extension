@@ -1,10 +1,12 @@
-import { clickSettingsButton, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
+import { clickSettingsButton, closeSettingsPanel, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
-// Constants
-const subtitleOverlaySelector = ".bmpui-ui-subtitle-overlay";
-const subtitleLabelSelector = ".bmpui-ui-subtitle-label";
-const controlbarBottomSelector = ".bmpui-ui-controlbar-bottom";
+// Constants — NPO's player uses npoplayer-* classes (replaced Bitmovin bmpui-*)
+const subtitleOverlaySelector = ".npoplayer-subtitle-overlay";
+// New player has no separate label; cue text lives directly in the overlay.
+const subtitleLabelSelector = ".npoplayer-subtitle-overlay";
+const playerRootSelector = ".npoplayer-video";
+const controlbarRightSelector = ".npoplayer-bottom-bar-container-right";
 const toggleButtonId = "npo-dual-sub-toggle";
 const translatedSubtitleColor = "#1eb7d3";
 const storageKeyTranslationEnabled = "translationEnabled";
@@ -26,14 +28,10 @@ let clickAbortController: AbortController | null = null;
 let wordClickObserver: MutationObserver | null = null;
 let wordClickWaitObserver: MutationObserver | null = null;
 let wordClickTargetNode: Element | null = null;
-let subtitleSelectionAbortController: AbortController | null = null;
-let isPausedBySubtitleHover = false;
 let isPausedByWordHover = false;
 const storageKeyWordClickEnabled = "wordClickEnabled";
-const storageKeySubtitleSelectionEnabled = "subtitleSelectionEnabled";
 const storageKeyAutoPauseEnabled = "autoPauseEnabled";
 let currentSelectedLanguage = "en";
-let isSubtitleSelectionModeActive = false;
 let isAutoPauseEnabled = true;
 let isWordClickEnabled = true;
 
@@ -146,8 +144,7 @@ const activateWithSubtitles = (silent = false): void => {
   setTimeout(() => {
     const success = turnOnSubtitles();
     if (!success) {
-      // Close settings panel
-      clickSettingsButton();
+      closeSettingsPanel();
       if (!silent) {
         alert(
           'Could not turn on Dutch subtitles.\n\n' +
@@ -159,7 +156,7 @@ const activateWithSubtitles = (silent = false): void => {
     }
   }, 400);
   setTimeout(() => {
-    clickSettingsButton();
+    closeSettingsPanel();
   }, 600);
   setTimeout(() => {
     startMonitoring();
@@ -202,47 +199,63 @@ const monitorDomChanges = (): void => {
   translationObserver.observe(targetNode, config);
 };
 
-const handleMutations = async (): Promise<void> => {
-  if (document.getElementsByClassName("translated").length > 0) return;
+const getDutchSubtitleText = (subtitleParent: HTMLElement): string => {
+  const clone = subtitleParent.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".translated").forEach((el) => el.remove());
+  return clone.innerText.split("\n").join(" ").replace(/\s+/g, " ").trim();
+};
 
+const handleMutations = async (): Promise<void> => {
   const subtitleParentElement = document.querySelector(subtitleLabelSelector) as HTMLElement;
   if (!subtitleParentElement) return;
 
-  const textToTranslate = subtitleParentElement.innerText.split("\n").join(" ");
+  const textToTranslate = getDutchSubtitleText(subtitleParentElement);
+  if (!textToTranslate) return;
 
   if (textToTranslate === lastText && lastTranslatedText !== undefined) {
-    addTranslatedSubtitle(lastTranslatedText);
+    if (!subtitleParentElement.querySelector(".translated")) {
+      addTranslatedSubtitle(lastTranslatedText);
+    }
     return;
   }
 
+  subtitleParentElement.querySelectorAll(".translated").forEach((el) => el.remove());
   chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.Translate, payload: textToTranslate } as ChromeRuntimeMessage);
   lastText = textToTranslate;
-}
+};
 
 const addTranslatedSubtitle = (subtitle: string): void => {
   const subtitleParentElement = document.querySelector(subtitleLabelSelector) as HTMLElement;
-  const subtitleElement = subtitleParentElement.firstChild as HTMLElement | null;
-  if (!subtitleElement) return;
+  if (!subtitleParentElement) return;
 
+  subtitleParentElement.querySelectorAll(".translated").forEach((el) => el.remove());
   const newSpan = createTranslatedSpan(subtitle);
   insertTranslatedSpan(subtitleParentElement, newSpan);
-}
+};
 
 const createTranslatedSpan = (subtitle: string): HTMLElement => {
   const newSpan = document.createElement("span");
   newSpan.innerText = subtitle;
   newSpan.classList.add("translated");
+  // Position above the native cue without changing the overlay's flex layout
+  // (flex-wrap / flex-basis blows up the player's subtitle font sizing).
+  newSpan.style.position = "absolute";
+  newSpan.style.left = "50%";
+  newSpan.style.bottom = "100%";
+  newSpan.style.transform = "translateX(-50%)";
+  newSpan.style.marginBottom = "0.35em";
+  newSpan.style.whiteSpace = "normal";
+  newSpan.style.maxWidth = "90vw";
+  newSpan.style.textAlign = "center";
   newSpan.style.color = translatedSubtitleColor;
   newSpan.style.backgroundColor = "black";
   newSpan.setAttribute("lang", `${currentSelectedLanguage}-x-mtfrom-nl`);
   return newSpan;
-}
+};
 
 const insertTranslatedSpan = (parent: HTMLElement, newSpan: HTMLElement): void => {
-  const br = document.createElement("br");
-  parent.insertBefore(br, parent.firstChild);
   parent.insertBefore(newSpan, parent.firstChild);
-}
+};
 
 const subtitlePointerStyleId = 'npo-subtitle-pointer-styles';
 
@@ -250,15 +263,10 @@ const injectSubtitlePointerStyles = (): void => {
   if (document.getElementById(subtitlePointerStyleId)) return;
   const style = document.createElement('style');
   style.id = subtitlePointerStyleId;
-  // The player CSS sets pointer-events:none on .bmpui-ui-subtitle-overlay and
-  // all: unset on its children, which makes pointer-events inherit as none.
-  // We override that here so our .npo-word spans can receive mouse events.
-  // .bmpui-ui-playbacktoggle-overlay is a later DOM sibling so it stacks on top of
-  // .bmpui-ui-subtitle-overlay and intercepts all clicks by default.
-  // Fix: raise the subtitle overlay above it via z-index (the overlay already has
-  // position:absolute from the player CSS, so z-index takes effect).
-  // Keep pointer-events:none on the overlay itself so non-text clicks fall through to
-  // the playback toggle overlay below — only the label and .npo-word spans are targets.
+  // Keep pointer-events:none on the overlay so non-text clicks fall through to
+  // .npoplayer-click-overlay / controls; only npo-word elements receive clicks.
+  // Use a custom element (not <span>) so player CSS that styles overlay spans
+  // does not add extra spacing between words.
   const tooltipCss = [
     '#npo-word-tooltip { position:fixed; display:none; z-index:2147483647; background:#1a1a2e; color:#e8e8e8; font-family:Arial,sans-serif; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.65),0 2px 8px rgba(0,0,0,0.4); min-width:300px; max-width:420px; pointer-events:auto; border:1px solid rgba(255,255,255,0.12); overflow:hidden; user-select:text; -webkit-user-select:text; }',
     '.npo-tt-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 8px; background:rgba(255,255,255,0.07); border-bottom:1px solid rgba(255,255,255,0.1); }',
@@ -277,12 +285,10 @@ const injectSubtitlePointerStyles = (): void => {
     '.npo-tt-link:hover { color:#d6e9ff; border-color:rgba(214,233,255,0.55); }',
   ];
   style.textContent = [
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay { z-index: 10 !important; pointer-events: none !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: auto !important; cursor: default !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-settings-panel, .bmpui-ui-uicontainer .bmpui-ui-settings-panel-page { z-index: 30 !important; pointer-events: auto !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-settingspanelpageopenbutton.bmpui-listbox-pager-button { z-index: 31 !important; pointer-events: auto !important; }',
-    '.bmpui-ui-uicontainer:has(.bmpui-ui-settingstogglebutton.bmpui-on) .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: none !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .npo-word { pointer-events: auto !important; cursor: pointer !important; text-decoration: underline dotted rgba(255,255,255,0.55) !important; }',
+    `${playerRootSelector} .npoplayer-subtitle-overlay { z-index: 20 !important; pointer-events: none !important; }`,
+    `${playerRootSelector} .npoplayer-subtitle-overlay npo-word { display: inline !important; margin: 0 !important; padding: 0 !important; border: none !important; font: inherit !important; font-size: inherit !important; line-height: inherit !important; letter-spacing: inherit !important; word-spacing: inherit !important; color: inherit !important; background: transparent !important; pointer-events: auto !important; cursor: pointer !important; text-decoration: underline dotted rgba(255,255,255,0.55) !important; }`,
+    `${playerRootSelector} .npoplayer-settings-panel { z-index: 30 !important; pointer-events: auto !important; }`,
+    `${playerRootSelector}:has(.npoplayer-settings-panel:not(.npoplayer-hidden)) .npoplayer-subtitle-overlay npo-word { pointer-events: none !important; }`,
     ...tooltipCss,
   ].join('\n');
   document.head.appendChild(style);
@@ -290,81 +296,6 @@ const injectSubtitlePointerStyles = (): void => {
 
 const removeSubtitlePointerStyles = (): void => {
   document.getElementById(subtitlePointerStyleId)?.remove();
-};
-
-const subtitleSelectionStyleId = 'npo-subtitle-selection-styles';
-
-const injectSubtitleSelectionStyles = (): void => {
-  if (document.getElementById(subtitleSelectionStyleId)) return;
-  const style = document.createElement('style');
-  style.id = subtitleSelectionStyleId;
-  style.textContent = [
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay { z-index: 10 !important; pointer-events: none !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: auto !important; user-select: text !important; -webkit-user-select: text !important; cursor: text !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-settings-panel, .bmpui-ui-uicontainer .bmpui-ui-settings-panel-page { z-index: 30 !important; pointer-events: auto !important; user-select: none !important; -webkit-user-select: none !important; }',
-    '.bmpui-ui-uicontainer .bmpui-ui-settingspanelpageopenbutton.bmpui-listbox-pager-button, .bmpui-ui-uicontainer .bmpui-ui-settings-trigger, .bmpui-ui-uicontainer .bmpui-ui-settingstogglebutton { z-index: 31 !important; pointer-events: auto !important; cursor: pointer !important; user-select: none !important; -webkit-user-select: none !important; }',
-    '.bmpui-ui-uicontainer:has(.bmpui-ui-settingstogglebutton.bmpui-on) .bmpui-ui-subtitle-overlay .bmpui-ui-subtitle-label { pointer-events: none !important; }',
-  ].join('\n');
-  document.head.appendChild(style);
-};
-
-const removeSubtitleSelectionStyles = (): void => {
-  document.getElementById(subtitleSelectionStyleId)?.remove();
-};
-
-const startSubtitleSelectionMode = (): void => {
-  if (isSubtitleSelectionModeActive) return;
-  isSubtitleSelectionModeActive = true;
-  stopWordClick();
-  injectSubtitleSelectionStyles();
-
-  subtitleSelectionAbortController = new AbortController();
-  const { signal } = subtitleSelectionAbortController;
-  document.addEventListener('mouseover', (e: Event) => {
-    if (!isAutoPauseEnabled) return;
-    const mouseEvent = e as MouseEvent;
-    const target = mouseEvent.target as HTMLElement | null;
-    if (!target) return;
-
-    const label = target.closest(subtitleLabelSelector) as HTMLElement | null;
-    if (!label) return;
-
-    const related = mouseEvent.relatedTarget as HTMLElement | null;
-    if (related && label.contains(related)) return;
-
-    if (!isPausedBySubtitleHover) {
-      isPausedBySubtitleHover = pauseVideoOnce();
-    }
-  }, { signal });
-
-  document.addEventListener('mouseout', (e: Event) => {
-    if (!isAutoPauseEnabled) return;
-    const mouseEvent = e as MouseEvent;
-    const target = mouseEvent.target as HTMLElement | null;
-    if (!target) return;
-
-    const label = target.closest(subtitleLabelSelector) as HTMLElement | null;
-    if (!label) return;
-
-    const related = mouseEvent.relatedTarget as HTMLElement | null;
-    if (related && label.contains(related)) return;
-
-    if (isPausedBySubtitleHover) {
-      const resumed = playVideoOnce();
-      if (resumed) {
-        isPausedBySubtitleHover = false;
-      }
-    }
-  }, { signal });
-};
-
-const stopSubtitleSelectionMode = (): void => {
-  if (!isSubtitleSelectionModeActive) return;
-  isSubtitleSelectionModeActive = false;
-  isPausedBySubtitleHover = false;
-  subtitleSelectionAbortController?.abort();
-  subtitleSelectionAbortController = null;
-  removeSubtitleSelectionStyles();
 };
 
 const getOrCreateTooltip = (host?: HTMLElement): HTMLElement => {
@@ -485,11 +416,24 @@ const positionTooltip = (tip: HTMLElement, wordEl: HTMLElement): void => {
 };
 
 const showTooltip = (wordEl: HTMLElement, word: string, result: WordResult | null): void => {
-  const host = wordEl.closest('.bmpui-ui-uicontainer') as HTMLElement | null;
+  const host = wordEl.closest(playerRootSelector) as HTMLElement | null;
   const tip = getOrCreateTooltip(host ?? undefined);
   renderTooltipContent(tip, word, result);
   tip.style.display = 'block';
   positionTooltip(tip, wordEl);
+};
+
+const getPlayerVideo = (): HTMLVideoElement | null => {
+  return document.querySelector<HTMLVideoElement>(`${playerRootSelector} video`);
+};
+
+const getPlayToggleButton = (): HTMLElement | null => {
+  return (
+    document.querySelector<HTMLElement>(".npoplayer-small-play-button:not(.npoplayer-hidden)") ||
+    document.querySelector<HTMLElement>(".npoplayer-play-button:not(.npoplayer-hidden)") ||
+    document.querySelector<HTMLElement>(".npoplayer-small-play-button") ||
+    document.querySelector<HTMLElement>(".npoplayer-play-button")
+  );
 };
 
 const updateTooltipContent = (result: WordResult): void => {
@@ -511,38 +455,41 @@ const hideTooltip = (): void => {
 };
 
 const pauseVideoOnce = (): boolean => {
-  const btn =
-    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton.bmpui-on') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton.bmpui-on') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton');
-  // Use bubbles:false so this programmatic click does not propagate to the document
-  // listener that dismisses the tooltip.
-  if (!btn) return false;
-  btn.dispatchEvent(new MouseEvent('click', { bubbles: false, cancelable: true }));
+  const btn = getPlayToggleButton();
+  if (btn) {
+    // Player marks paused state with the `paused` class on the play button.
+    if (btn.classList.contains("paused")) return false;
+    btn.click();
+    return true;
+  }
+  const video = getPlayerVideo();
+  if (!video || video.paused) return false;
+  video.pause();
   return true;
 };
 
 const playVideoOnce = (): boolean => {
-  const btn =
-    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton:not(.bmpui-on)') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton:not(.bmpui-on)') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-playbacktogglebutton') ||
-    document.querySelector<HTMLElement>('.bmpui-ui-hugeplaybacktogglebutton');
-  if (!btn) return false;
-  btn.dispatchEvent(new MouseEvent('click', { bubbles: false, cancelable: true }));
+  const btn = getPlayToggleButton();
+  if (btn) {
+    if (!btn.classList.contains("paused")) return false;
+    btn.click();
+    return true;
+  }
+  const video = getPlayerVideo();
+  if (!video || !video.paused) return false;
+  void video.play();
   return true;
 };
 
 const isVideoPlaying = (): boolean => {
-  return Boolean(
-    document.querySelector('.bmpui-ui-playbacktogglebutton.bmpui-on') ||
-    document.querySelector('.bmpui-ui-hugeplaybacktogglebutton.bmpui-on')
-  );
+  const btn = getPlayToggleButton();
+  if (btn) return !btn.classList.contains("paused");
+  const video = getPlayerVideo();
+  return Boolean(video && !video.paused);
 };
 
 const wrapWordsInSubtitle = (subtitleLabel: HTMLElement): void => {
-  if (subtitleLabel.querySelector('.npo-word')) return;
+  if (subtitleLabel.querySelector('npo-word')) return;
 
   const walker = document.createTreeWalker(
     subtitleLabel,
@@ -551,7 +498,7 @@ const wrapWordsInSubtitle = (subtitleLabel: HTMLElement): void => {
       acceptNode(node: Node): number {
         let parent = node.parentElement;
         while (parent && parent !== subtitleLabel) {
-          if (parent.classList.contains('translated') || parent.classList.contains('npo-word')) {
+          if (parent.classList.contains('translated') || parent.tagName === 'NPO-WORD') {
             return NodeFilter.FILTER_SKIP;
           }
           parent = parent.parentElement;
@@ -580,11 +527,11 @@ const wrapWordsInSubtitle = (subtitleLabel: HTMLElement): void => {
         if (!cleanWord) {
           fragment.appendChild(document.createTextNode(part));
         } else {
-          const span = document.createElement('span');
-          span.className = 'npo-word';
-          span.dataset.word = cleanWord;
-          span.textContent = part;
-          fragment.appendChild(span);
+          // Custom element avoids player CSS that targets overlay <span>s (extra gaps).
+          const wordEl = document.createElement('npo-word');
+          wordEl.dataset.word = cleanWord;
+          wordEl.textContent = part;
+          fragment.appendChild(wordEl);
         }
       }
     }
@@ -607,7 +554,7 @@ const attachSubtitleClickListeners = (): void => {
     const mouseEvent = e as MouseEvent;
     const target = mouseEvent.target as HTMLElement | null;
     if (!target) return;
-    const wordEl = target.closest('.npo-word') as HTMLElement | null;
+    const wordEl = target.closest('npo-word') as HTMLElement | null;
     if (!wordEl) return;
 
     const related = mouseEvent.relatedTarget as HTMLElement | null;
@@ -618,40 +565,19 @@ const attachSubtitleClickListeners = (): void => {
     }
   }, { signal });
 
-  labelEl.addEventListener('mouseout', (e: Event) => {
-    if (!isAutoPauseEnabled) return;
-    const mouseEvent = e as MouseEvent;
-    const target = mouseEvent.target as HTMLElement | null;
-    if (!target) return;
-    const wordEl = target.closest('.npo-word') as HTMLElement | null;
-    if (!wordEl) return;
-
-    const related = mouseEvent.relatedTarget as HTMLElement | null;
-    if (related && wordEl.contains(related)) return;
-    if (related && labelEl.contains(related)) return;
-
-    // When moving across text gaps, relatedTarget can be null; keep paused if the
-    // pointer is still within the subtitle label's box.
-    const rect = labelEl.getBoundingClientRect();
-    const isStillInsideLabel =
-      mouseEvent.clientX >= rect.left &&
-      mouseEvent.clientX <= rect.right &&
-      mouseEvent.clientY >= rect.top &&
-      mouseEvent.clientY <= rect.bottom;
-    if (isStillInsideLabel) return;
-
+  // mouseleave only fires when leaving the overlay entirely (not word-to-word).
+  labelEl.addEventListener('mouseleave', () => {
+    if (!isAutoPauseEnabled || !isPausedByWordHover) return;
     const isTooltipOpen = Boolean(tooltipEl && tooltipEl.style.display !== 'none');
-    if (!isTooltipOpen && isPausedByWordHover) {
-      const resumed = playVideoOnce();
-      if (resumed) {
-        isPausedByWordHover = false;
-      }
+    if (isTooltipOpen) return;
+    if (playVideoOnce()) {
+      isPausedByWordHover = false;
     }
   }, { signal });
 
   labelEl.addEventListener('click', (e: Event) => {
     const target = e.target as HTMLElement;
-    if (!target.classList.contains('npo-word')) return;
+    if (target.tagName !== 'NPO-WORD') return;
     e.stopPropagation();
     const word = target.dataset.word;
     if (!word) return;
@@ -734,14 +660,8 @@ const stopWordClick = (): void => {
   detachSubtitleClickListeners();
 };
 
-const injectToggleButton = (controlbar: Element): void => {
+const injectToggleButton = (controlbarRight: Element): void => {
   if (document.getElementById(toggleButtonId)) return;
-
-  const wrapper = controlbar.querySelector('.bmpui-container-wrapper');
-  if (!wrapper) return;
-
-  const spacer = wrapper.querySelector('.bmpui-ui-spacer');
-  if (!spacer) return;
 
   const btn = document.createElement('button');
   btn.id = toggleButtonId;
@@ -749,27 +669,29 @@ const injectToggleButton = (controlbar: Element): void => {
   btn.setAttribute('aria-pressed', 'false');
   btn.setAttribute('aria-label', 'Dual subtitles: off');
   btn.setAttribute('title', 'Toggle dual subtitles');
-  btn.className = 'bmpui-ui-button';
 
   // SVG as background-image data URI — same pattern all player buttons use
   const svgDataUri = "data:image/svg+xml;charset=utf-8,%3Csvg fill='none' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 260'%3E%3Cpath d='M120 70H245V185H215L235 245L155 185H120V70Z' fill='white' stroke='black' stroke-width='4' stroke-linejoin='round'/%3E%3Ctext x='145' y='150' font-family='Arial%2C sans-serif' font-size='60' font-weight='bold' fill='black'%3EEN%3C/text%3E%3Cpath d='M15 15H150V135H60L25 215V135H15V15Z' fill='%23FF7F00' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Ctext x='22' y='95' font-family='Arial%2C sans-serif' font-size='55' font-weight='bold' fill='white'%3ENPO%3C/text%3E%3C/svg%3E";
 
+  btn.style.background = 'transparent';
   btn.style.backgroundImage = `url("${svgDataUri}")`;
-  btn.style.width = '21px';
-  btn.style.height = '40px';
+  btn.style.backgroundRepeat = 'no-repeat';
+  btn.style.backgroundPosition = 'center';
+  btn.style.backgroundSize = '24px';
+  btn.style.border = 'none';
+  btn.style.width = '24px';
+  btn.style.height = '24px';
   btn.style.padding = '0';
   btn.style.margin = '0';
-  btn.style.backgroundSize = '18px';
+  btn.style.cursor = 'pointer';
   btn.style.filter = 'grayscale(1)';
   btn.style.opacity = '0.45';
   btn.style.transition = 'filter 0.2s, opacity 0.2s';
+  btn.style.flexShrink = '0';
+  btn.style.alignSelf = 'center';
 
-  // Empty label span to match the structure of other player buttons
-  const label = document.createElement('span');
-  label.className = 'bmpui-label';
-  btn.appendChild(label);
-
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (isTranslationActive) {
       stopMonitoring();
     } else {
@@ -777,18 +699,18 @@ const injectToggleButton = (controlbar: Element): void => {
     }
   });
 
-  spacer.insertAdjacentElement('afterend', btn);
+  controlbarRight.prepend(btn);
 };
 
 const watchForPlayerContainer = (): void => {
-  const existing = document.querySelector(controlbarBottomSelector);
+  const existing = document.querySelector(controlbarRightSelector);
   if (existing) {
     injectToggleButton(existing);
     return;
   }
 
   playerContainerObserver = new MutationObserver(() => {
-    const controlbar = document.querySelector(controlbarBottomSelector);
+    const controlbar = document.querySelector(controlbarRightSelector);
     if (controlbar && !document.getElementById(toggleButtonId)) {
       injectToggleButton(controlbar);
     }
@@ -798,14 +720,11 @@ const watchForPlayerContainer = (): void => {
 };
 
 // Bootstrap
-safeStorageGet([storageKeyWordClickEnabled, storageKeySubtitleSelectionEnabled, storageKeyAutoPauseEnabled, 'selectedLanguage'], (data) => {
+safeStorageGet([storageKeyWordClickEnabled, storageKeyAutoPauseEnabled, 'selectedLanguage'], (data) => {
   if (data['selectedLanguage']) currentSelectedLanguage = data['selectedLanguage'] as string;
   isAutoPauseEnabled = data[storageKeyAutoPauseEnabled] !== false;
   isWordClickEnabled = data[storageKeyWordClickEnabled] !== false;
-  const isSubtitleSelectionEnabled = data[storageKeySubtitleSelectionEnabled] === true;
-  if (isSubtitleSelectionEnabled) {
-    startSubtitleSelectionMode();
-  } else if (isWordClickEnabled) {
+  if (isWordClickEnabled) {
     startWordClick();
   }
 });
@@ -817,30 +736,17 @@ chrome.storage.onChanged.addListener((changes) => {
   if (storageKeyAutoPauseEnabled in changes) {
     isAutoPauseEnabled = changes[storageKeyAutoPauseEnabled].newValue !== false;
     if (!isAutoPauseEnabled) {
-      if (isPausedByWordHover || isPausedBySubtitleHover) {
+      if (isPausedByWordHover) {
         playVideoOnce();
       }
       isPausedByWordHover = false;
-      isPausedBySubtitleHover = false;
     }
   }
   if (storageKeyWordClickEnabled in changes) {
     isWordClickEnabled = changes[storageKeyWordClickEnabled].newValue === true;
-  }
-  if (storageKeyWordClickEnabled in changes || storageKeySubtitleSelectionEnabled in changes) {
-    const subtitleSelectionEnabled =
-      storageKeySubtitleSelectionEnabled in changes
-        ? changes[storageKeySubtitleSelectionEnabled].newValue === true
-        : isSubtitleSelectionModeActive;
-
-    if (subtitleSelectionEnabled) {
-      startSubtitleSelectionMode();
-      stopWordClick();
-    } else if (isWordClickEnabled) {
-      stopSubtitleSelectionMode();
+    if (isWordClickEnabled) {
       startWordClick();
     } else {
-      stopSubtitleSelectionMode();
       stopWordClick();
     }
   }
