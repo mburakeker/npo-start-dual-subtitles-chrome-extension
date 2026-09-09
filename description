@@ -1,4 +1,5 @@
 ﻿What's new:
+- [0.5.1] Fixed dual subtitles not appearing on the first click of the player toggle. Translation now waits for the subtitle overlay, keeps the background worker alive while Google Translate responds, and defaults to English if no language is selected.
 - [0.5.0] Updated the extension to comply with new changes on the player.
 - [0.4.1] Improved pause-on-hover behavior, added a popup checkbox to control pause on subtitle hover, and removed automatic translation state restore on new videos (the previous remembered-state auto-start behavior was inconsistent and often caused issues).
 - [0.4.0] Added click-to-translate for subtitle words with an in-player popup, plus a selectable-subtitles checkbox so external tools like Reverso can translate words directly from the page.
@@ -13,15 +14,14 @@ How it works:
 
 - Head to NPO Start's website (https://npo.nl/start)
 - Play any video  the extension detects the player automatically
-- If Dutch subtitles (Nederlands) are available, translation activates on its own
-- Use the toggle button (the NPO/EN icon) in the bottom bar of the video player to turn translation on or off at any time
+- Use the toggle button (the NPO/EN icon) in the bottom bar of the video player to turn translation on. Dutch subtitles (Nederlands) are enabled automatically when available
+- Use the same button to turn translation off at any time
 - To change the target language, click the extension icon in the toolbar and select from the dropdown  your choice is saved
 
 Features:
 - Click-to-translate for subtitles
-- Fully automatic: no manual steps required when subtitles are available.
-- Player-integrated toggle button enable or disable translation without leaving the video.
-- Remembers your last toggle state across videos and page refreshes.
+- Player-integrated toggle button: enable or disable translation without leaving the video.
+- Dutch subtitles are turned on automatically when you activate the toggle, if they are available.
 - Translates Dutch subtitles to any of 30+ supported languages.
 - Works across NPO Start's live channels, movies, and shows.
 - Clean dual-subtitle display: original Dutch on screen, translation shown above it.

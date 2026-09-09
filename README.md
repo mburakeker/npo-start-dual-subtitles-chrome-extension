@@ -1,72 +1,57 @@
 # NPO Start Dual Subtitles
 
-NPO Start Dual Subtitles is a Chrome extension designed for language learning. It allows users to view dual subtitles on NPO Start, translating Dutch subtitles into English.
+Chrome extension for language learners watching [NPO Start](https://npo.nl/start/). It shows a translation above the native Dutch subtitles, and lets you click a word for a dictionary lookup.
+
+Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/npo-start-dual-subtitles/fiaaicoacdjmcpnlainngknokhbkiogl), or load an unpacked build from this repo (see below). Current version: **0.5.1**.
+
+## How to use
+
+1. Open a video or live channel on [npo.nl/start](https://npo.nl/start/).
+2. Click the NPO/EN toggle in the player’s bottom-right controls.
+3. If Dutch subtitles (`Ondertiteling` → `Nederlands`) are available, they are turned on and the translation appears above the Dutch cue.
+4. Click the same button to turn translation off.
+
+The target language defaults to English. Change it from the extension popup (toolbar icon). Your choice is saved.
+
+Dutch subtitles must exist for that title. If they do not, the toggle stays off and the button tooltip says so. Switching to another video turns the toggle off; it only comes back on if that video also has Dutch subtitles.
 
 ## Features
 
-- Automatically monitors subtitle changes on NPO Start.
-- Translates Dutch subtitles to English using Google Translate API.
-- Displays translated subtitles alongside the original ones.
+- Dual subtitles in the player: original Dutch plus a translation above it
+- 30+ target languages via the popup
+- Click a Dutch subtitle word for Wiktionary and Google Translate, plus links to DeepL, Forvo, Tatoeba, and others
+- Optional pause-on-hover for subtitle words (on by default; can be disabled in the popup)
+- Works on NPO Start live channels, shows, and films
+- Adapted to NPO’s current `npoplayer` UI
 
-## Installation
+## Development install
 
-1. Clone the repository to your local machine:
-    ```sh
-    git clone https://github.com/yourusername/npo-subtitle-translator.git
-    ```
+```sh
+git clone https://github.com/mburakeker/npo-start-dual-subtitles-chrome-extension.git
+cd npo-start-dual-subtitles-chrome-extension
+npm i && npm run build
+```
 
-2. Install the required packages and build:
-    ```sh
-    npm i & npm run build
-    ```
+1. Open `chrome://extensions/`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select the `dist` folder
 
-3. Open Chrome and navigate to `chrome://extensions/`
-
-4. Enable "Developer mode" by toggling the switch in the top right corner.
-
-5. Click on "Load unpacked" and select the `dist` folder.
-
-## Usage
-
-1. Navigate to [NPO Start](https://npo.nl/start/).
-
-2. Open a video either by selecting a live channel or an existing video.
-
-3. Turn on the subtitles by selecting `Gear (Settings) Icon` > `Ondertiteling` > `Nederlands`.
-
-4. Click on the extension icon in the Chrome toolbar or press `Ctrl + B` (or `Command + B` on Mac).
-
-5. The extension will start monitoring subtitle changes and translate them automatically.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
+Reload the extension after each `npm run build`.
 
 ## Contributing
 
-1. Fork the repository.
+1. Fork the repository and create a branch.
+2. Make your changes, build, and test on npo.nl.
+3. Open a pull request.
 
-2. Create a new branch:
-    ```sh
-    git checkout -b feature/your-feature-name
-    ```
+## License
 
-3. Make your changes and commit them:
-    ```sh
-    git commit -m 'Add some feature'
-    ```
-
-4. Push to the branch:
-    ```sh
-    git push origin feature/your-feature-name
-    ```
-
-5. Open a pull request.
+MIT. See [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This project is for educational purposes only. It is not intended for commercial use.
+This project is for educational use. Translations are powered by Google Translate. Google disclaims all warranties related to the translations, express or implied, including accuracy, reliability, merchantability, fitness for a particular purpose, and noninfringement.
 
 ## Contact
 
-For any questions or suggestions, please open an issue.
+Questions or issues: [mburakekerdev@gmail.com](mailto:mburakekerdev@gmail.com) or open a GitHub issue.

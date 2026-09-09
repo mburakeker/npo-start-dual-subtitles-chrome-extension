@@ -1,9 +1,36 @@
 const settingsToggleSelector = ".npoplayer-settings-toggle-button";
+const LOG_PREFIX = "[npo-dual-sub]";
+
+const SETTINGS_PANEL_LABELS = ["Instellingen", "Settings"];
+const SUBTITLE_LABELS = ["Ondertiteling", "Subtitles"];
+const DUTCH_LABELS = ["Nederlands", "Dutch"];
+const OFF_LABELS = ["Uit", "Off"];
+
+const log = (...args: unknown[]): void => {
+  console.info(LOG_PREFIX, ...args);
+};
+
+const textMatches = (value: string | null | undefined, labels: string[]): boolean => {
+  const text = value?.trim();
+  return Boolean(text && labels.includes(text));
+};
 
 function getMainSettingsPanel(): HTMLElement | null {
-  return document.querySelector<HTMLElement>(
-    '.npoplayer-settings-panel[aria-label="Instellingen"]'
-  );
+  for (const label of SETTINGS_PANEL_LABELS) {
+    const labeled = document.querySelector<HTMLElement>(
+      `.npoplayer-settings-panel[aria-label="${label}"]`
+    );
+    if (labeled) return labeled;
+  }
+
+  const panels = document.querySelectorAll<HTMLElement>(".npoplayer-settings-panel");
+  for (const panel of panels) {
+    const rows = panel.querySelectorAll(".npoplayer-settings-row-label");
+    for (const row of rows) {
+      if (textMatches(row.textContent, SUBTITLE_LABELS)) return panel;
+    }
+  }
+  return null;
 }
 
 function isSettingsPanelOpen(panel: Element | null): boolean {
@@ -12,8 +39,17 @@ function isSettingsPanelOpen(panel: Element | null): boolean {
 
 export function clickSettingsButton() {
   const panel = getMainSettingsPanel();
-  if (isSettingsPanelOpen(panel)) return;
-  document.querySelector<HTMLElement>(settingsToggleSelector)?.click();
+  if (isSettingsPanelOpen(panel)) {
+    log("settings panel already open");
+    return;
+  }
+  const toggle = document.querySelector<HTMLElement>(settingsToggleSelector);
+  if (!toggle) {
+    log("settings toggle button not found");
+    return;
+  }
+  log("clicking settings toggle");
+  toggle.click();
 }
 
 export function closeSettingsPanel() {
@@ -36,32 +72,46 @@ export function closeSettingsPanel() {
 
 export function openSubtitleSettings() {
   const panel = getMainSettingsPanel();
-  if (!panel) return;
+  if (!panel) {
+    log("cannot open subtitle settings: main panel missing");
+    return;
+  }
 
   const rows = panel.querySelectorAll<HTMLElement>("button.npoplayer-settings-row");
+  log("settings rows", Array.from(rows).map((row) => ({
+    label: row.querySelector(".npoplayer-settings-row-label")?.textContent?.trim(),
+    value: row.querySelector(".npoplayer-settings-row-value")?.textContent?.trim(),
+    aria: row.getAttribute("aria-label"),
+  })));
+
   for (const row of rows) {
     const label = row.querySelector(".npoplayer-settings-row-label");
     const labelText = label?.textContent?.trim();
     const ariaLabel = row.getAttribute("aria-label") ?? "";
-    if (labelText === "Ondertiteling" || ariaLabel.startsWith("Ondertiteling")) {
+    if (
+      textMatches(labelText, SUBTITLE_LABELS) ||
+      SUBTITLE_LABELS.some((name) => ariaLabel.startsWith(name))
+    ) {
+      log("opening subtitle settings row", labelText || ariaLabel);
       row.click();
       return;
     }
   }
+  log("subtitle settings row not found");
 }
 
 function getSubtitleOptionsPanel(): Element | null {
   const panels = document.querySelectorAll(".npoplayer-settings-panel");
   for (const panel of panels) {
     const heading = panel.querySelector("h2");
-    if (heading?.textContent?.trim() === "Ondertiteling") {
+    if (textMatches(heading?.textContent, SUBTITLE_LABELS)) {
       return panel;
     }
   }
   return null;
 }
 
-function findSubtitleOptionButton(label: string): HTMLElement | null {
+function findSubtitleOptionButton(labels: string[]): HTMLElement | null {
   const panel = getSubtitleOptionsPanel();
   if (!panel) return null;
 
@@ -69,21 +119,21 @@ function findSubtitleOptionButton(label: string): HTMLElement | null {
     Array.from(panel.querySelectorAll<HTMLElement>("button.npoplayer-settings-row")).find(
       (btn) => {
         const text = btn.textContent?.replace("✔", "").trim();
-        return text === label;
+        return textMatches(text, labels);
       }
     ) ?? null
   );
 }
 
-function isDutchSubtitleAlreadyOn(): boolean {
+export function isDutchSubtitleAlreadyOn(): boolean {
   const panel = getMainSettingsPanel();
   if (!panel) return false;
 
   for (const row of panel.querySelectorAll<HTMLElement>("button.npoplayer-settings-row")) {
     const label = row.querySelector(".npoplayer-settings-row-label")?.textContent?.trim();
-    if (label !== "Ondertiteling") continue;
+    if (!textMatches(label, SUBTITLE_LABELS)) continue;
     const value = row.querySelector(".npoplayer-settings-row-value")?.textContent?.trim();
-    return value === "Nederlands";
+    return textMatches(value, DUTCH_LABELS);
   }
   return false;
 }
@@ -91,24 +141,27 @@ function isDutchSubtitleAlreadyOn(): boolean {
 export function hasNederlandsSubtitles(): boolean {
   clickSettingsButton();
   openSubtitleSettings();
-  const found = Boolean(findSubtitleOptionButton("Nederlands"));
+  const found = Boolean(findSubtitleOptionButton(DUTCH_LABELS));
   closeSettingsPanel();
   return found;
 }
 
 export function turnOffSubtitles() {
-  findSubtitleOptionButton("Uit")?.click();
+  findSubtitleOptionButton(OFF_LABELS)?.click();
 }
 
 export function turnOnSubtitles(): boolean {
   if (isDutchSubtitleAlreadyOn()) {
+    log("Dutch subtitles already on");
     return true;
   }
 
-  const nederlandsButton = findSubtitleOptionButton("Nederlands");
+  const nederlandsButton = findSubtitleOptionButton(DUTCH_LABELS);
   if (nederlandsButton) {
+    log("clicking Dutch subtitle option");
     nederlandsButton.click();
     return true;
   }
+  log("Dutch subtitle option not found");
   return false;
 }

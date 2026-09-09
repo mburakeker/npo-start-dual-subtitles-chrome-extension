@@ -44,17 +44,60 @@ languages.forEach((language) => {
 });
 // set the default language to English
 languageSelector.value = 'en';
-// add event listener to save the selected language
+
+const githubNewIssueUrl = 'https://github.com/mburakeker/npo-start-dual-subtitles-chrome-extension/issues/new';
+const githubIssueLink = document.getElementById('github-issue-link') as HTMLAnchorElement;
+
+const buildGitHubIssueUrl = (): string => {
+  const version = chrome.runtime.getManifest().version;
+  const body = [
+    '## What happened',
+    '',
+    '<!-- Describe what went wrong -->',
+    '',
+    '## Steps to reproduce',
+    '',
+    '1. Open a video on https://npo.nl/start',
+    '2. Click the NPO/EN toggle in the player',
+    '3. ',
+    '',
+    '## Expected behavior',
+    '',
+    '',
+    '## Extra info',
+    '',
+    `- Extension version: ${version}`,
+    `- Target language: ${languageSelector.value}`,
+    `- Browser: ${navigator.userAgent}`,
+    '',
+  ].join('\n');
+
+  return (
+    githubNewIssueUrl +
+    '?title=' + encodeURIComponent('[Bug] Dual subtitles not working') +
+    '&body=' + encodeURIComponent(body)
+  );
+};
+
+const refreshGitHubIssueLink = (): void => {
+  githubIssueLink.href = buildGitHubIssueUrl();
+};
+
+refreshGitHubIssueLink();
+
 languageSelector.addEventListener('change', (event) => {
   const selectedLanguage = (event.target as HTMLSelectElement).value;
   chrome.storage.local.set({ selectedLanguage });
+  refreshGitHubIssueLink();
 });
 
-// get the saved language from storage and set it as the selected value
 chrome.storage.local.get('selectedLanguage', (data) => {
   if (data.selectedLanguage) {
     languageSelector.value = data.selectedLanguage;
+  } else {
+    chrome.storage.local.set({ selectedLanguage: 'en' });
   }
+  refreshGitHubIssueLink();
 });
 
 // word-click toggle

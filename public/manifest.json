@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NPO Start Dual Subtitles",
   "description": "NPO Start Dual Subtitles for language learning",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "icons": {
     "128": "images/icon-128.png",
     "256": "images/icon-256.png"
@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "js": ["content.js"],
-      "matches": ["*://npo.nl/*"]
+      "matches": ["*://npo.nl/*", "*://*.npo.nl/*"]
     }
   ],
   "permissions": ["activeTab", "storage"]

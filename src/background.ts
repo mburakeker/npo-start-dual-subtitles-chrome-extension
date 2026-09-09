@@ -1,19 +1,57 @@
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
+const log = (...args: unknown[]): void => {
+  console.info("[npo-dual-sub]", ...args);
+};
 
+const logWarn = (...args: unknown[]): void => {
+  console.warn("[npo-dual-sub]", ...args);
+};
+
+const logError = (...args: unknown[]): void => {
+  console.error("[npo-dual-sub]", ...args);
+};
+
+type RuntimeResponse = { ok: boolean; error?: string };
 
 chrome.runtime.onMessage.addListener(
-  (req: ChromeRuntimeMessage, sender: chrome.runtime.MessageSender): void => {
-    if (req.type === ChromeRuntimeMessageType.Translate && req.payload && sender.tab?.id) {
-      translateSubtitle(sender.tab.id, req.payload);
+  (
+    req: ChromeRuntimeMessage,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: RuntimeResponse) => void
+  ): boolean | void => {
+    if (req.type === ChromeRuntimeMessageType.Translate && req.payload) {
+      if (!sender.tab?.id) {
+        logWarn("translate message has no tab id");
+        sendResponse({ ok: false, error: "no tab id" });
+        return;
+      }
+      const tabId = sender.tab.id;
+      translateSubtitle(tabId, req.payload)
+        .then(() => sendResponse({ ok: true }))
+        .catch((err: unknown) => {
+          logError("subtitle translate failed", err);
+          sendResponse({ ok: false, error: String(err) });
+        });
+      return true;
     }
-    if (req.type === ChromeRuntimeMessageType.TranslateWord && req.payload && sender.tab?.id) {
-      translateWord(sender.tab.id, req.payload);
+    if (req.type === ChromeRuntimeMessageType.TranslateWord && req.payload) {
+      if (!sender.tab?.id) {
+        logWarn("translate-word message has no tab id");
+        sendResponse({ ok: false, error: "no tab id" });
+        return;
+      }
+      const tabId = sender.tab.id;
+      translateWord(tabId, req.payload)
+        .then(() => sendResponse({ ok: true }))
+        .catch((err: unknown) => {
+          logError("word translate failed", err);
+          sendResponse({ ok: false, error: String(err) });
+        });
+      return true;
     }
   }
 );
-
-// Functions
 
 const translateSubtitle = async (
   tabId: number,
@@ -21,43 +59,55 @@ const translateSubtitle = async (
 ): Promise<void> => {
   if (!subtitle) return;
   const { selectedLanguage } = await chrome.storage.local.get("selectedLanguage");
+  const tl = (selectedLanguage as string) || "en";
 
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=${selectedLanguage}&dt=t&q=${encodeURI(
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=${tl}&dt=t&q=${encodeURIComponent(
     subtitle
   )}`;
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Connection: "keep-alive",
-        Accept: "*/*",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+  log("translating subtitle", { tl, length: subtitle.length });
 
-    if (response.status !== 200) {
-      console.error(response.status);
-      return;
-    }
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Connection: "keep-alive",
+      Accept: "*/*",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 
-    const data = await response.json();
-    const translatedText = data[0].map((item: string[]) => item[0]).join(" ");
-    sendTranslatedSubtitle(tabId, translatedText);
-  } catch (err) {
-    console.error(err);
+  if (response.status !== 200) {
+    throw new Error(`subtitle translate HTTP ${response.status}`);
   }
+
+  const data = await response.json();
+  const translatedText = data[0].map((item: string[]) => item[0]).join(" ");
+  log("subtitle translate ok", translatedText?.slice?.(0, 80));
+  await sendTranslatedSubtitle(tabId, translatedText);
 };
 
 const sendTranslatedSubtitle = (
   tabId: number,
   translatedText: string
-): void => {
-  chrome.tabs.sendMessage(tabId, {
-    type: ChromeRuntimeMessageType.TranslateFinished,
-    payload: translatedText,
-  } as ChromeRuntimeMessage);
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(
+      tabId,
+      {
+        type: ChromeRuntimeMessageType.TranslateFinished,
+        payload: translatedText,
+      } as ChromeRuntimeMessage,
+      () => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          reject(new Error(err.message));
+          return;
+        }
+        resolve();
+      }
+    );
+  });
 };
 
 const fetchWiktionary = async (word: string): Promise<string | null> => {
@@ -103,6 +153,7 @@ const translateWord = async (tabId: number, word: string): Promise<void> => {
   if (!word) return;
   const { selectedLanguage } = await chrome.storage.local.get("selectedLanguage");
   const tl = (selectedLanguage as string) || "en";
+  log("translating word", { word, tl });
 
   const [wiktResult, gtResult] = await Promise.allSettled([
     fetchWiktionary(word),
@@ -112,8 +163,21 @@ const translateWord = async (tabId: number, word: string): Promise<void> => {
   const wiktionary = wiktResult.status === "fulfilled" ? wiktResult.value : null;
   const googleTranslate = gtResult.status === "fulfilled" ? gtResult.value : null;
 
-  chrome.tabs.sendMessage(tabId, {
-    type: ChromeRuntimeMessageType.TranslateWordFinished,
-    payload: JSON.stringify({ word, wiktionary, googleTranslate }),
-  } as ChromeRuntimeMessage);
+  await new Promise<void>((resolve, reject) => {
+    chrome.tabs.sendMessage(
+      tabId,
+      {
+        type: ChromeRuntimeMessageType.TranslateWordFinished,
+        payload: JSON.stringify({ word, wiktionary, googleTranslate }),
+      } as ChromeRuntimeMessage,
+      () => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          reject(new Error(err.message));
+          return;
+        }
+        resolve();
+      }
+    );
+  });
 };

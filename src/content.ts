@@ -1,4 +1,4 @@
-import { clickSettingsButton, closeSettingsPanel, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
+import { clickSettingsButton, closeSettingsPanel, isDutchSubtitleAlreadyOn, openSubtitleSettings, turnOnSubtitles } from "./onboarding-helper";
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
 
 // Constants — NPO's player uses npoplayer-* classes (replaced Bitmovin bmpui-*)
@@ -8,15 +8,97 @@ const subtitleLabelSelector = ".npoplayer-subtitle-overlay";
 const playerRootSelector = ".npoplayer-video";
 const controlbarRightSelector = ".npoplayer-bottom-bar-container-right";
 const toggleButtonId = "npo-dual-sub-toggle";
+const noSubtitlesNoticeId = "npo-dual-sub-notice";
 const translatedSubtitleColor = "#1eb7d3";
 const storageKeyTranslationEnabled = "translationEnabled";
+const LOG_PREFIX = "[npo-dual-sub]";
 
 // State
-let lastText: string;
-let lastTranslatedText: string;
+let lastText: string | undefined;
+let lastTranslatedText: string | undefined;
 let translationObserver: MutationObserver | null = null;
+let translationWaitObserver: MutationObserver | null = null;
+let translationTargetNode: Element | null = null;
 let isTranslationActive = false;
+let isActivationInProgress = false;
+let revalidateQueued = false;
+let lastLocationKey = location.pathname + location.search;
 let playerContainerObserver: MutationObserver | null = null;
+let noSubtitlesNoticeTimer: number | null = null;
+
+const log = (...args: unknown[]): void => {
+  console.info(LOG_PREFIX, ...args);
+};
+
+const logWarn = (...args: unknown[]): void => {
+  console.warn(LOG_PREFIX, ...args);
+};
+
+const logError = (...args: unknown[]): void => {
+  console.error(LOG_PREFIX, ...args);
+};
+
+const dumpPlayerHints = (): void => {
+  const classes = new Set<string>();
+  document.querySelectorAll('[class*="npoplayer"], [class*="bmpui"]').forEach((el) => {
+    el.classList.forEach((cls) => {
+      if (cls.includes("npoplayer") || cls.includes("bmpui")) classes.add(cls);
+    });
+  });
+  log("player hints", {
+    href: location.href,
+    isTopFrame: window === window.top,
+    togglePresent: Boolean(document.getElementById(toggleButtonId)),
+    controlbar: Boolean(document.querySelector(controlbarRightSelector)),
+    overlay: Boolean(document.querySelector(subtitleOverlaySelector)),
+    settingsToggle: Boolean(document.querySelector(".npoplayer-settings-toggle-button")),
+    classes: [...classes].sort(),
+  });
+};
+
+const delay = (ms: number): Promise<void> => {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+};
+
+const waitFor = (predicate: () => boolean, timeoutMs: number): Promise<boolean> => {
+  if (predicate()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const observer = new MutationObserver(() => {
+      if (predicate()) {
+        cleanup();
+        resolve(true);
+      }
+    });
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve(predicate());
+    }, timeoutMs);
+    const cleanup = (): void => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+  });
+};
+
+const sendRuntimeMessage = (message: ChromeRuntimeMessage, context: string): void => {
+  try {
+    chrome.runtime.sendMessage(message, (response?: { ok?: boolean; error?: string }) => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        logError(`${context} sendMessage failed`, err.message);
+        return;
+      }
+      if (response?.ok === false) {
+        logError(`${context} failed`, response.error);
+      }
+    });
+  } catch (err) {
+    if (!isExtensionContextInvalidError(err)) {
+      logError(`${context} sendMessage threw`, err);
+    }
+  }
+};
 
 // Word click state
 type WordResult = { wiktionary: string | null; googleTranslate: string | null };
@@ -113,10 +195,13 @@ const getResourceLinksForWord = (word: string, targetLanguage: string): Resource
 };
 
 // Event Listeners
-chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
+chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage, _sender, sendResponse) => {
   if (req.type === ChromeRuntimeMessageType.TranslateFinished && req.payload) {
+    log("received translation", req.payload.slice(0, 80));
     addTranslatedSubtitle(req.payload);
     lastTranslatedText = req.payload;
+    sendResponse({ ok: true });
+    return;
   }
   if (req.type === ChromeRuntimeMessageType.TranslateWordFinished && req.payload) {
     const parsed = JSON.parse(req.payload) as { word: string; wiktionary: string | null; googleTranslate: string | null };
@@ -125,6 +210,7 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
     if (parsed.word === currentClickedWord) {
       updateTooltipContent(result);
     }
+    sendResponse({ ok: true });
   }
 });
 
@@ -132,40 +218,69 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage) => {
 const startMonitoring = (): void => {
   isTranslationActive = true;
   safeStorageSet({ [storageKeyTranslationEnabled]: true });
+  hideNoSubtitlesNotice();
   updateToggleButtonState();
   monitorDomChanges();
 };
 
-const activateWithSubtitles = (silent = false): void => {
+const updateToggleButtonPending = (pending: boolean): void => {
+  const btn = document.getElementById(toggleButtonId) as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.setAttribute("aria-busy", pending ? "true" : "false");
+  if (pending) {
+    btn.style.filter = "none";
+    btn.style.opacity = "0.75";
+    return;
+  }
+  updateToggleButtonState();
+};
+
+const activateWithSubtitles = async (silent = false): Promise<void> => {
+  log("activating dual subtitles");
+  updateToggleButtonPending(true);
+
   clickSettingsButton();
-  setTimeout(() => {
+  const panelOpen = await waitFor(() => {
+    const panel = document.querySelector(".npoplayer-settings-panel");
+    return Boolean(panel && !panel.classList.contains("npoplayer-hidden"));
+  }, 2500);
+  log("settings panel open", panelOpen);
+  if (!panelOpen) dumpPlayerHints();
+
+  if (!isDutchSubtitleAlreadyOn()) {
     openSubtitleSettings();
-  }, 200);
-  setTimeout(() => {
-    const success = turnOnSubtitles();
-    if (!success) {
-      closeSettingsPanel();
-      if (!silent) {
-        alert(
-          'Could not turn on Dutch subtitles.\n\n' +
-          'Please check that the content you are watching has subtitles available, ' +
-          'then try activating again.'
-        );
-      }
-      return;
-    }
-  }, 400);
-  setTimeout(() => {
-    closeSettingsPanel();
-  }, 600);
-  setTimeout(() => {
-    startMonitoring();
-  }, 800);
+    const dutchOptionReady = await waitFor(() => turnOnSubtitles(), 2500);
+    log("Dutch subtitle option ready", dutchOptionReady);
+  }
+
+  const success = turnOnSubtitles();
+  log("Dutch subtitles enabled", success);
+  closeSettingsPanel();
+
+  if (!success) {
+    logWarn("could not enable Dutch subtitles");
+    dumpPlayerHints();
+    stopMonitoring();
+    if (!silent) showNoSubtitlesNotice();
+    return;
+  }
+
+  startMonitoring();
+  const overlayReady = await waitFor(
+    () => Boolean(document.querySelector(subtitleOverlaySelector)),
+    8000
+  );
+  log("subtitle overlay after enable", overlayReady ? "ready" : "still missing");
+  if (!overlayReady) dumpPlayerHints();
 };
 
 const stopMonitoring = (): void => {
+  log("stopping dual subtitles");
   isTranslationActive = false;
   safeStorageSet({ [storageKeyTranslationEnabled]: false });
+  translationWaitObserver?.disconnect();
+  translationWaitObserver = null;
+  translationTargetNode = null;
   if (translationObserver) {
     translationObserver.disconnect();
     translationObserver = null;
@@ -173,30 +288,164 @@ const stopMonitoring = (): void => {
   updateToggleButtonState();
 };
 
+const attachTranslationObserver = (targetNode: Element): void => {
+  if (translationObserver && translationTargetNode === targetNode) return;
+
+  if (translationObserver) {
+    translationObserver.disconnect();
+    translationObserver = null;
+  }
+
+  translationTargetNode = targetNode;
+  translationObserver = new MutationObserver(handleMutations);
+  const config = { attributes: false, childList: true, subtree: true, characterData: true } as MutationObserverInit;
+  translationObserver.observe(targetNode, config);
+  log("observing subtitle overlay");
+  void handleMutations();
+};
+
 const updateToggleButtonState = (): void => {
   const btn = document.getElementById(toggleButtonId) as HTMLButtonElement | null;
   if (!btn) return;
+  btn.setAttribute("aria-busy", "false");
   if (isTranslationActive) {
     btn.setAttribute('aria-pressed', 'true');
     btn.setAttribute('aria-label', 'Dual subtitles: on');
+    btn.setAttribute('title', 'Toggle dual subtitles');
     btn.style.filter = 'none';
     btn.style.opacity = '1';
   } else {
     btn.setAttribute('aria-pressed', 'false');
     btn.setAttribute('aria-label', 'Dual subtitles: off');
+    btn.setAttribute('title', 'Toggle dual subtitles');
     btn.style.filter = 'grayscale(1)';
     btn.style.opacity = '0.45';
   }
 };
 
-const monitorDomChanges = (): void => {
-  if (translationObserver) return; // already running
-  const targetNode = document.querySelector(subtitleOverlaySelector);
-  if (!targetNode) return;
+const hideNoSubtitlesNotice = (): void => {
+  if (noSubtitlesNoticeTimer !== null) {
+    window.clearTimeout(noSubtitlesNoticeTimer);
+    noSubtitlesNoticeTimer = null;
+  }
+  document.getElementById(noSubtitlesNoticeId)?.remove();
+};
 
-  translationObserver = new MutationObserver(handleMutations);
-  const config = { attributes: false, childList: true, subtree: true, characterData: true } as MutationObserverInit;
-  translationObserver.observe(targetNode, config);
+const positionNoSubtitlesNotice = (notice: HTMLElement, btn: HTMLElement | null): void => {
+  const noticeRect = notice.getBoundingClientRect();
+  const rect = btn?.getBoundingClientRect();
+  if (!rect) {
+    notice.style.left = "50%";
+    notice.style.bottom = "88px";
+    notice.style.top = "auto";
+    notice.style.transform = "translateX(-50%)";
+    return;
+  }
+
+  let left = rect.right - noticeRect.width;
+  let top = rect.top - noticeRect.height - 12;
+  left = Math.max(8, Math.min(left, window.innerWidth - noticeRect.width - 8));
+  if (top < 8) top = rect.bottom + 12;
+  notice.style.left = `${left}px`;
+  notice.style.top = `${top}px`;
+  notice.style.bottom = "auto";
+  notice.style.transform = "none";
+};
+
+const showNoSubtitlesNotice = (): void => {
+  hideNoSubtitlesNotice();
+  const message = "No Dutch subtitles available for this video";
+  const btn = document.getElementById(toggleButtonId) as HTMLButtonElement | null;
+  if (btn) {
+    btn.setAttribute("title", message);
+    btn.setAttribute("aria-label", message);
+  }
+
+  const host =
+    document.fullscreenElement instanceof HTMLElement
+      ? document.fullscreenElement
+      : (btn?.closest(playerRootSelector) as HTMLElement | null) ?? document.body;
+
+  const notice = document.createElement("div");
+  notice.id = noSubtitlesNoticeId;
+  notice.setAttribute("role", "status");
+  notice.setAttribute("aria-live", "polite");
+  notice.style.position = "fixed";
+  notice.style.zIndex = "2147483646";
+  notice.style.display = "flex";
+  notice.style.alignItems = "center";
+  notice.style.gap = "10px";
+  notice.style.maxWidth = "min(340px, calc(100vw - 16px))";
+  notice.style.padding = "12px 12px 12px 14px";
+  notice.style.background = "#1a1a2e";
+  notice.style.color = "#f4f4f4";
+  notice.style.fontFamily = "Arial, sans-serif";
+  notice.style.fontSize = "14px";
+  notice.style.lineHeight = "1.4";
+  notice.style.fontWeight = "600";
+  notice.style.borderRadius = "8px";
+  notice.style.border = "1px solid rgba(255,255,255,0.16)";
+  notice.style.boxShadow = "0 8px 32px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)";
+  notice.style.pointerEvents = "auto";
+  notice.addEventListener("click", (e) => e.stopPropagation());
+
+  const text = document.createElement("span");
+  text.textContent = message;
+  notice.appendChild(text);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Dismiss");
+  closeBtn.textContent = "\u00d7";
+  closeBtn.style.all = "unset";
+  closeBtn.style.cursor = "pointer";
+  closeBtn.style.color = "rgba(255,255,255,0.55)";
+  closeBtn.style.fontSize = "22px";
+  closeBtn.style.lineHeight = "1";
+  closeBtn.style.padding = "0 2px";
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideNoSubtitlesNotice();
+    updateToggleButtonState();
+  });
+  notice.appendChild(closeBtn);
+
+  host.appendChild(notice);
+  positionNoSubtitlesNotice(notice, btn);
+  notice.animate(
+    [
+      { opacity: 0, transform: "translateY(8px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    { duration: 180, easing: "ease-out", fill: "forwards" }
+  );
+
+  noSubtitlesNoticeTimer = window.setTimeout(() => {
+    hideNoSubtitlesNotice();
+    updateToggleButtonState();
+  }, 6000);
+};
+
+const monitorDomChanges = (): void => {
+  if (!translationWaitObserver) {
+    translationWaitObserver = new MutationObserver(() => {
+      if (!isTranslationActive) return;
+      const currentTarget = document.querySelector(subtitleOverlaySelector);
+      if (currentTarget && currentTarget !== translationTargetNode) {
+        log("subtitle overlay appeared or was replaced");
+        attachTranslationObserver(currentTarget);
+      }
+    });
+    translationWaitObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  const targetNode = document.querySelector(subtitleOverlaySelector);
+  if (!targetNode) {
+    log("subtitle overlay not in DOM yet, waiting");
+    return;
+  }
+
+  attachTranslationObserver(targetNode);
 };
 
 const getDutchSubtitleText = (subtitleParent: HTMLElement): string => {
@@ -220,13 +469,20 @@ const handleMutations = async (): Promise<void> => {
   }
 
   subtitleParentElement.querySelectorAll(".translated").forEach((el) => el.remove());
-  chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.Translate, payload: textToTranslate } as ChromeRuntimeMessage);
+  log("translating cue", textToTranslate.slice(0, 80));
+  sendRuntimeMessage(
+    { type: ChromeRuntimeMessageType.Translate, payload: textToTranslate } as ChromeRuntimeMessage,
+    "translate"
+  );
   lastText = textToTranslate;
 };
 
 const addTranslatedSubtitle = (subtitle: string): void => {
   const subtitleParentElement = document.querySelector(subtitleLabelSelector) as HTMLElement;
-  if (!subtitleParentElement) return;
+  if (!subtitleParentElement) {
+    logWarn("cannot insert translation, overlay missing");
+    return;
+  }
 
   subtitleParentElement.querySelectorAll(".translated").forEach((el) => el.remove());
   const newSpan = createTranslatedSpan(subtitle);
@@ -589,7 +845,10 @@ const attachSubtitleClickListeners = (): void => {
       showTooltip(target, word, wordTranslationCache.get(word)!);
     } else {
       showTooltip(target, word, null);
-      chrome.runtime.sendMessage({ type: ChromeRuntimeMessageType.TranslateWord, payload: word } as ChromeRuntimeMessage);
+      sendRuntimeMessage(
+        { type: ChromeRuntimeMessageType.TranslateWord, payload: word } as ChromeRuntimeMessage,
+        "translate-word"
+      );
     }
   }, { signal });
 
@@ -620,6 +879,7 @@ const startWordClick = (): void => {
 
   const targetNode = document.querySelector(subtitleOverlaySelector);
   if (!targetNode) {
+    log("word-click waiting for subtitle overlay");
     return;
   }
 
@@ -692,38 +952,127 @@ const injectToggleButton = (controlbarRight: Element): void => {
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (isActivationInProgress) {
+      log("ignoring click, activation already in progress");
+      return;
+    }
     if (isTranslationActive) {
       stopMonitoring();
-    } else {
-      activateWithSubtitles(false);
+      return;
     }
+    isActivationInProgress = true;
+    void activateWithSubtitles(false).finally(() => {
+      finishActivation();
+    });
   });
 
   controlbarRight.prepend(btn);
+  updateToggleButtonState();
+  log("injected toggle button");
 };
 
-const watchForPlayerContainer = (): void => {
-  const existing = document.querySelector(controlbarRightSelector);
-  if (existing) {
-    injectToggleButton(existing);
+const finishActivation = (): void => {
+  isActivationInProgress = false;
+  if (revalidateQueued) {
+    revalidateQueued = false;
+    void handleVideoNavigation();
+  }
+};
+
+const resetCueState = (): void => {
+  lastText = undefined;
+  lastTranslatedText = undefined;
+  wordTranslationCache.clear();
+  hideTooltip();
+  hideNoSubtitlesNotice();
+};
+
+const handleVideoNavigation = async (): Promise<void> => {
+  resetCueState();
+  if (isActivationInProgress) {
+    revalidateQueued = true;
+    log("queued subtitle revalidation for new video");
+    return;
+  }
+  if (!isTranslationActive) {
+    log("navigated while dual subtitles were off");
     return;
   }
 
-  playerContainerObserver = new MutationObserver(() => {
+  log("navigated while dual subtitles were on, checking this video");
+  stopMonitoring();
+  isActivationInProgress = true;
+  updateToggleButtonPending(true);
+
+  try {
+    await waitFor(
+      () => Boolean(document.querySelector(".npoplayer-settings-toggle-button")),
+      5000
+    );
+    await delay(400);
+    await activateWithSubtitles(true);
+  } finally {
+    finishActivation();
+  }
+};
+
+const onLocationMaybeChanged = (): void => {
+  const next = location.pathname + location.search;
+  if (next === lastLocationKey) return;
+  lastLocationKey = next;
+  log("location changed", next);
+  void handleVideoNavigation();
+};
+
+const watchLocationChanges = (): void => {
+  const wrapHistoryMethod = (method: "pushState" | "replaceState"): void => {
+    const original = history[method].bind(history);
+    history[method] = (...args: Parameters<History["pushState"]>) => {
+      const result = original(...args);
+      onLocationMaybeChanged();
+      return result;
+    };
+  };
+  wrapHistoryMethod("pushState");
+  wrapHistoryMethod("replaceState");
+  window.addEventListener("popstate", onLocationMaybeChanged);
+};
+
+const watchForPlayerContainer = (): void => {
+  const tryInject = (): void => {
+    onLocationMaybeChanged();
     const controlbar = document.querySelector(controlbarRightSelector);
     if (controlbar && !document.getElementById(toggleButtonId)) {
       injectToggleButton(controlbar);
     }
-  });
+  };
 
-  playerContainerObserver.observe(document.body, { childList: true, subtree: true });
+  tryInject();
+
+  if (!playerContainerObserver) {
+    playerContainerObserver = new MutationObserver(tryInject);
+    playerContainerObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  window.setTimeout(() => {
+    if (!document.getElementById(toggleButtonId)) {
+      logWarn("toggle button not injected after 5s");
+      dumpPlayerHints();
+    }
+  }, 5000);
 };
 
 // Bootstrap
+log("content script loaded", { href: location.href, isTopFrame: window === window.top });
 safeStorageGet([storageKeyWordClickEnabled, storageKeyAutoPauseEnabled, 'selectedLanguage'], (data) => {
-  if (data['selectedLanguage']) currentSelectedLanguage = data['selectedLanguage'] as string;
+  if (data['selectedLanguage']) {
+    currentSelectedLanguage = data['selectedLanguage'] as string;
+  } else {
+    safeStorageSet({ selectedLanguage: currentSelectedLanguage });
+  }
   isAutoPauseEnabled = data[storageKeyAutoPauseEnabled] !== false;
   isWordClickEnabled = data[storageKeyWordClickEnabled] !== false;
+  log("settings", { currentSelectedLanguage, isAutoPauseEnabled, isWordClickEnabled });
   if (isWordClickEnabled) {
     startWordClick();
   }
@@ -753,3 +1102,4 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 watchForPlayerContainer();
+watchLocationChanges();
