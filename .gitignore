@@ -25,4 +25,4 @@ dist-ssr
 *.sw?
 
 # Container References
-container-ref/*
+container-ref

@@ -1,14 +1,11 @@
+import { log } from "../shared/log";
+
 const settingsToggleSelector = ".npoplayer-settings-toggle-button";
-const LOG_PREFIX = "[npo-dual-sub]";
 
 const SETTINGS_PANEL_LABELS = ["Instellingen", "Settings"];
 const SUBTITLE_LABELS = ["Ondertiteling", "Subtitles"];
 const DUTCH_LABELS = ["Nederlands", "Dutch"];
 const OFF_LABELS = ["Uit", "Off"];
-
-const log = (...args: unknown[]): void => {
-  console.info(LOG_PREFIX, ...args);
-};
 
 const textMatches = (value: string | null | undefined, labels: string[]): boolean => {
   const text = value?.trim();

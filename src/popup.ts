@@ -3,7 +3,7 @@
 import {
   getReleaseNote,
   storageKeyLastSeenWhatsNew,
-} from "./whats-new";
+} from "./whats-new/notes";
 
 // add languages to the language selector
 const languageSelector = document.getElementById('language-selector') as HTMLSelectElement;

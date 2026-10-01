@@ -1,4 +1,5 @@
 ﻿What's new:
+- [0.5.3] Add TextTrack cue reading with prefetch and domain-based module layout.
 - [0.5.2] Fixed issue where subtitles were appearing so tiny. Small refactoring around click-to-translate functionality. Added what's new section and a badge to make the updates more visible.
 - [0.5.1] Fixed dual subtitles not appearing on the first click of the player toggle. Translation now waits for the subtitle overlay, keeps the background worker alive while Google Translate responds, and defaults to English if no language is selected.
 - [0.5.0] Updated the extension to comply with new changes on the player.
