@@ -1,5 +1,10 @@
 'use strict';
 
+import {
+  getReleaseNote,
+  storageKeyLastSeenWhatsNew,
+} from "./whats-new";
+
 // add languages to the language selector
 const languageSelector = document.getElementById('language-selector') as HTMLSelectElement;
 
@@ -116,3 +121,30 @@ wordClickToggle.addEventListener('change', () => {
 autoPauseToggle.addEventListener('change', () => {
   chrome.storage.local.set({ autoPauseEnabled: autoPauseToggle.checked });
 });
+
+const setupWhatsNew = (): void => {
+  const version = chrome.runtime.getManifest().version;
+  const note = getReleaseNote(version);
+  const card = document.getElementById('whats-new');
+  const versionEl = document.getElementById('whats-new-version');
+  const textEl = document.getElementById('whats-new-text');
+  if (!card || !versionEl || !textEl || !note) return;
+
+  versionEl.textContent = `v${version} / ${note.date}`;
+  textEl.textContent = note.text;
+  card.hidden = false;
+
+  chrome.storage.local.get(storageKeyLastSeenWhatsNew, (data) => {
+    const lastSeen = data[storageKeyLastSeenWhatsNew] as string | undefined;
+    const isUnread = lastSeen !== version;
+    card.classList.toggle('is-new', isUnread);
+
+    // Opening the popup marks the note as seen and clears the toolbar badge.
+    if (isUnread) {
+      chrome.storage.local.set({ [storageKeyLastSeenWhatsNew]: version });
+      void chrome.action.setBadgeText({ text: '' });
+    }
+  });
+};
+
+setupWhatsNew();

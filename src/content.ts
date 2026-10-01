@@ -206,10 +206,7 @@ chrome.runtime.onMessage.addListener((req: ChromeRuntimeMessage, _sender, sendRe
   if (req.type === ChromeRuntimeMessageType.TranslateWordFinished && req.payload) {
     const parsed = JSON.parse(req.payload) as { word: string; wiktionary: string | null; googleTranslate: string | null };
     const result: WordResult = { wiktionary: parsed.wiktionary, googleTranslate: parsed.googleTranslate };
-    wordTranslationCache.set(parsed.word, result);
-    if (parsed.word === currentClickedWord) {
-      updateTooltipContent(result);
-    }
+    applyWordResult(parsed.word, result);
     sendResponse({ ok: true });
   }
 });
@@ -492,7 +489,9 @@ const addTranslatedSubtitle = (subtitle: string): void => {
 const createTranslatedSpan = (subtitle: string): HTMLElement => {
   const newSpan = document.createElement("span");
   newSpan.innerText = subtitle;
-  newSpan.classList.add("translated");
+  // Also use npoplayer-subtitle-line so we pick up the player's @container
+  // font-size rules (overlay base is 10px; only .npoplayer-subtitle-line scales).
+  newSpan.classList.add("translated", "npoplayer-subtitle-line");
   // Position above the native cue without changing the overlay's flex layout
   // (flex-wrap / flex-basis blows up the player's subtitle font sizing).
   newSpan.style.position = "absolute";
@@ -692,17 +691,23 @@ const getPlayToggleButton = (): HTMLElement | null => {
   );
 };
 
-const updateTooltipContent = (result: WordResult): void => {
-  if (!tooltipEl || tooltipEl.style.display === 'none') return;
-  const texts = tooltipEl.querySelectorAll<HTMLElement>('.npo-tt-text');
-  if (texts[0]) {
-    texts[0].textContent = result.wiktionary ?? 'Not found';
-    texts[0].classList.toggle('npo-tt-not-found', !result.wiktionary);
+const isTooltipVisible = (): boolean => {
+  return Boolean(tooltipEl && tooltipEl.style.display !== 'none');
+};
+
+const applyWordResult = (word: string, result: WordResult): void => {
+  wordTranslationCache.set(word, result);
+  if (word !== currentClickedWord) return;
+
+  // Re-show if the tooltip was dismissed during the async lookup (e.g. DOM rebind),
+  // otherwise fill in the loading placeholder.
+  const wordEl = document.querySelector<HTMLElement>(`npo-word[data-word="${CSS.escape(word)}"]`);
+  if (!tooltipEl || !isTooltipVisible()) {
+    if (wordEl) showTooltip(wordEl, word, result);
+    return;
   }
-  if (texts[1]) {
-    texts[1].textContent = result.googleTranslate ?? 'Not found';
-    texts[1].classList.toggle('npo-tt-not-found', !result.googleTranslate);
-  }
+  renderTooltipContent(tooltipEl, word, result);
+  if (wordEl) positionTooltip(tooltipEl, wordEl);
 };
 
 const hideTooltip = (): void => {
@@ -710,38 +715,44 @@ const hideTooltip = (): void => {
   currentClickedWord = null;
 };
 
+// Prefer the <video> element over play-button.click(). A programmatic button
+// click bubbles to document and used to dismiss the word tooltip / clear
+// currentClickedWord before TranslateWordFinished arrived (first click showed
+// loading forever; second click hit the cache).
 const pauseVideoOnce = (): boolean => {
+  const video = getPlayerVideo();
+  if (video && !video.paused) {
+    video.pause();
+    return true;
+  }
   const btn = getPlayToggleButton();
-  if (btn) {
-    // Player marks paused state with the `paused` class on the play button.
-    if (btn.classList.contains("paused")) return false;
+  if (btn && !btn.classList.contains("paused")) {
     btn.click();
     return true;
   }
-  const video = getPlayerVideo();
-  if (!video || video.paused) return false;
-  video.pause();
-  return true;
+  return false;
 };
 
 const playVideoOnce = (): boolean => {
+  const video = getPlayerVideo();
+  if (video && video.paused) {
+    void video.play();
+    return true;
+  }
   const btn = getPlayToggleButton();
-  if (btn) {
-    if (!btn.classList.contains("paused")) return false;
+  if (btn && btn.classList.contains("paused")) {
     btn.click();
     return true;
   }
-  const video = getPlayerVideo();
-  if (!video || !video.paused) return false;
-  void video.play();
-  return true;
+  return false;
 };
 
 const isVideoPlaying = (): boolean => {
+  const video = getPlayerVideo();
+  if (video) return !video.paused;
   const btn = getPlayToggleButton();
   if (btn) return !btn.classList.contains("paused");
-  const video = getPlayerVideo();
-  return Boolean(video && !video.paused);
+  return false;
 };
 
 const wrapWordsInSubtitle = (subtitleLabel: HTMLElement): void => {
@@ -834,6 +845,7 @@ const attachSubtitleClickListeners = (): void => {
   labelEl.addEventListener('click', (e: Event) => {
     const target = e.target as HTMLElement;
     if (target.tagName !== 'NPO-WORD') return;
+    e.preventDefault();
     e.stopPropagation();
     const word = target.dataset.word;
     if (!word) return;
@@ -852,16 +864,23 @@ const attachSubtitleClickListeners = (): void => {
     }
   }, { signal });
 
-  document.addEventListener('click', () => {
+  document.addEventListener('click', (e: Event) => {
+    // Ignore programmatic clicks (fallback play-button.click()) and clicks inside
+    // the tooltip / word / our toggle so an open lookup is not dismissed.
+    if (!e.isTrusted) return;
+    const target = e.target as Element | null;
+    if (target?.closest?.(`#npo-word-tooltip, npo-word, #${toggleButtonId}`)) return;
     hideTooltip();
   }, { signal });
 };
 
-const detachSubtitleClickListeners = (): void => {
+const detachSubtitleClickListeners = (options?: { keepTooltip?: boolean }): void => {
   clickAbortController?.abort();
   clickAbortController = null;
   isPausedByWordHover = false;
-  hideTooltip();
+  if (!options?.keepTooltip) {
+    hideTooltip();
+  }
   removeSubtitlePointerStyles();
 };
 
@@ -889,6 +908,8 @@ const startWordClick = (): void => {
     wordClickObserver.disconnect();
     wordClickObserver = null;
   }
+  // Drop listeners from a previous overlay instance without closing an open tip.
+  detachSubtitleClickListeners({ keepTooltip: true });
 
   wordClickTargetNode = targetNode;
 
@@ -903,7 +924,9 @@ const startWordClick = (): void => {
   tryWrap();
 
   wordClickObserver = new MutationObserver(() => {
-    detachSubtitleClickListeners();
+    // Rebind without dismissing an open word tooltip. Dual-subtitle DOM
+    // updates (inserting .translated) must not cancel an in-flight lookup.
+    detachSubtitleClickListeners({ keepTooltip: true });
     tryWrap();
   });
   wordClickObserver.observe(targetNode, { childList: true, subtree: true, characterData: true });

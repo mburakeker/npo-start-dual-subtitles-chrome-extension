@@ -1,4 +1,8 @@
 import { ChromeRuntimeMessage, ChromeRuntimeMessageType } from "./types";
+import {
+  getReleaseNote,
+  storageKeyLastSeenWhatsNew,
+} from "./whats-new";
 
 const log = (...args: unknown[]): void => {
   console.info("[npo-dual-sub]", ...args);
@@ -181,3 +185,44 @@ const translateWord = async (tabId: number, word: string): Promise<void> => {
     );
   });
 };
+
+const syncWhatsNewBadge = (): void => {
+  const version = chrome.runtime.getManifest().version;
+  const note = getReleaseNote(version);
+  chrome.storage.local.get(storageKeyLastSeenWhatsNew, (data) => {
+    const lastSeen = data[storageKeyLastSeenWhatsNew] as string | undefined;
+    const showBadge = Boolean(note) && lastSeen !== version;
+    void chrome.action.setBadgeText({ text: showBadge ? "NEW" : "" });
+    if (showBadge) {
+      void chrome.action.setBadgeBackgroundColor({ color: "#f56a00" });
+      if (chrome.action.setBadgeTextColor) {
+        void chrome.action.setBadgeTextColor({ color: "#ffffff" });
+      }
+    }
+    // Restore the default icon in case an older build left a painted-dot icon.
+    void chrome.action.setIcon({
+      path: {
+        128: "images/icon-128.png",
+        256: "images/icon-256.png",
+      },
+    });
+  });
+};
+
+chrome.runtime.onInstalled.addListener((details) => {
+  // Fresh installs shouldn't need a "NEW" nudge; updates should.
+  if (details.reason === "install") {
+    chrome.storage.local.set({
+      [storageKeyLastSeenWhatsNew]: chrome.runtime.getManifest().version,
+    });
+    void chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+  syncWhatsNewBadge();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  syncWhatsNewBadge();
+});
+
+syncWhatsNewBadge();

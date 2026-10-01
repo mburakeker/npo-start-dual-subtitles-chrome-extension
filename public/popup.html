@@ -4,6 +4,13 @@
   </head>
   <body class="popup">
     <h1>NPO Start Dual Subtitles</h1>
+    <div id="whats-new" class="whats-new" hidden>
+      <div class="whats-new-header">
+        <span class="whats-new-label">What's new</span>
+        <span id="whats-new-version" class="whats-new-version"></span>
+      </div>
+      <p id="whats-new-text" class="whats-new-text"></p>
+    </div>
     <!-- Add Dropdown for language selection -->
     <label for="language-selector">Select Target Language:</label>
     <select id="language-selector"></select>
@@ -117,6 +124,45 @@
       .popup h1 {
         font-size: 20px;
         margin-bottom: 10px;
+      }
+      .whats-new {
+        margin: 0 0 14px;
+        padding: 10px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(0, 123, 255, 0.35);
+        background: rgba(0, 123, 255, 0.08);
+      }
+      .whats-new.is-new {
+        border-color: #f56a00;
+        background: rgba(245, 106, 0, 0.12);
+      }
+      .whats-new-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .whats-new-label {
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+      }
+      .whats-new.is-new .whats-new-label {
+        color: #f56a00;
+      }
+      .whats-new-version {
+        font-size: 11px;
+        font-weight: bold;
+        color: var(--text-muted);
+      }
+      .whats-new-text {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--text-secondary);
       }
       .popup label {
         font-size: 14px;
