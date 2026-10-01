@@ -8,7 +8,7 @@ export type ReleaseNote = {
 export const releaseNotesByVersion: Record<string, ReleaseNote> = {
   "0.5.2": {
     date: "01-10-2026",
-    text: "Fixed click-to-translate only showing the result on the second click; pausing the video no longer clears the in-flight word lookup.",
+    text: "Fixed issue where subtitles were appearing so tiny. Small refactoring around click-to-translate functionality. Added what's new section and a badge to make the updates more visible.",
   },
   "0.5.1": {
     date: "09-09-2026",

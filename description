@@ -1,5 +1,5 @@
 ﻿What's new:
-- [0.5.2] Fixed issue where subtitles were appearing so tiny. Small refactoring around click-to-translate functionality. Add update badge to make it more visible when the extension gets updated and what has changed.
+- [0.5.2] Fixed issue where subtitles were appearing so tiny. Small refactoring around click-to-translate functionality. Added what's new section and a badge to make the updates more visible.
 - [0.5.1] Fixed dual subtitles not appearing on the first click of the player toggle. Translation now waits for the subtitle overlay, keeps the background worker alive while Google Translate responds, and defaults to English if no language is selected.
 - [0.5.0] Updated the extension to comply with new changes on the player.
 - [0.4.1] Improved pause-on-hover behavior, added a popup checkbox to control pause on subtitle hover, and removed automatic translation state restore on new videos (the previous remembered-state auto-start behavior was inconsistent and often caused issues).
