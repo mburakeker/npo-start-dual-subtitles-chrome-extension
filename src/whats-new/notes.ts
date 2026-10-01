@@ -6,7 +6,7 @@ export type ReleaseNote = {
 
 /** Shown in the popup and used for the toolbar "NEW" badge. Update with each release. */
 export const releaseNotesByVersion: Record<string, ReleaseNote> = {
-  "0.5.3": {
+  "0.6.0": {
     date: "01-10-2026",
     text: "Faster subtitle translation by translating upcoming subtitles with TextTrack API instead of monitoring changes on the browser realtime.",
   },
